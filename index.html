@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inbound Order Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #1e2130;
+    --surface:  #252a3d;
+    --surface2: #2d3348;
+    --surface3: #353c54;
+    --border:   #3a4060;
+    --border2:  #4a526e;
+    --navy:     #1a2340;
+    --accent:   #3d6fff;
+    --accent2:  #5b84ff;
+    --green:    #34d399;
+    --green-dim:#10b981;
+    --amber:    #fbbf24;
+    --red:      #f87171;
+    --purple:   #a78bfa;
+    --text:     #e4e8f5;
+    --text2:    #8b95b5;
+    --muted:    #5a6380;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0; opacity: 0.4;
+  }
+  .topbar {
+    background: var(--navy); border-bottom: 1px solid var(--border);
+    padding: 0 32px; height: 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative; z-index: 2;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 24px; }
+  .topbar-brand {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar-brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .topbar-pill {
+    font-size: 11px; font-family: var(--mono);
+    background: rgba(61,111,255,0.15); color: var(--accent2);
+    border: 1px solid rgba(61,111,255,0.25); padding: 2px 8px; border-radius: 20px;
+  }
+  .topbar-right { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  /* Tabs */
+  .tab-nav {
+    background: var(--navy); border-bottom: 1px solid var(--border);
+    padding: 0 32px; display: flex; position: relative; z-index: 2;
+  }
+  .tab-btn {
+    padding: 12px 24px; font-size: 13px; font-weight: 600; color: var(--text2);
+    cursor: pointer; border: none; background: none;
+    border-bottom: 2px solid transparent; transition: all 0.16s;
+    font-family: var(--sans); display: flex; align-items: center; gap: 8px;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent2); border-bottom-color: var(--accent); }
+  .tab-count {
+    font-size: 11px; font-family: var(--mono);
+    background: var(--surface3); border: 1px solid var(--border2);
+    color: var(--text2); padding: 1px 7px; border-radius: 20px;
+  }
+  .tab-btn.active .tab-count { background: rgba(61,111,255,0.15); border-color: rgba(61,111,255,0.3); color: var(--accent2); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .app { position: relative; z-index: 1; max-width: 100%; margin: 0 auto; padding: 28px 32px; }
+  .page-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 16px;
+  }
+  .page-title h1 { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
+  .page-title p  { font-size: 13px; color: var(--text2); margin-top: 4px; font-family: var(--mono); }
+  .page-actions  { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 8px 16px; border-radius: 7px; font-family: var(--sans);
+    font-size: 13px; font-weight: 600; cursor: pointer; outline: none;
+    border: 1px solid transparent; transition: all 0.16s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent2); border-color: var(--accent2); box-shadow: 0 4px 14px rgba(61,111,255,0.35); }
+  .btn-danger  { background: var(--surface2); color: var(--red); border-color: var(--border); }
+  .btn-danger:hover { border-color: var(--red); background: rgba(248,113,113,0.07); }
+
+  .btn-receive {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--green-dim);
+    background: rgba(52,211,153,0.1); color: var(--green);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-receive:hover { background: rgba(52,211,153,0.2); box-shadow: 0 0 10px rgba(52,211,153,0.15); }
+  .btn-receive.done { background: rgba(52,211,153,0.04); border-color: rgba(52,211,153,0.18); color: rgba(52,211,153,0.35); cursor: default; }
+  .btn-complete {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid rgba(52,211,153,0.5);
+    background: rgba(52,211,153,0.15); color: var(--green);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-complete:hover { background: rgba(52,211,153,0.25); box-shadow: 0 0 10px rgba(52,211,153,0.2); }
+  .btn-copy {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 4px; font-size: 10px;
+    font-family: var(--mono); font-weight: 500; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface3);
+    color: var(--muted); transition: all 0.15s;
+    vertical-align: middle; margin-left: 6px; white-space: nowrap;
+  }
+  .btn-copy:hover { border-color: var(--accent); color: var(--accent2); background: rgba(61,111,255,0.08); }
+  .btn-copy.copied { border-color: var(--green-dim); color: var(--green); background: rgba(52,211,153,0.08); }
+  .btn-unreceive {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    cursor: pointer; border: 1px solid rgba(248,113,113,0.35);
+    background: rgba(248,113,113,0.07); color: var(--red);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-unreceive:hover { background: rgba(248,113,113,0.15); border-color: var(--red); }
+  .copy-col { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  td.copy-col-cell { white-space: nowrap; }
+
+  /* Retool send button */
+  .btn-retool {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid rgba(61,111,255,0.4);
+    background: rgba(61,111,255,0.12); color: var(--accent2);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-retool:hover { background: rgba(61,111,255,0.22); box-shadow: 0 0 10px rgba(61,111,255,0.2); }
+  .btn-retool.ready { border-color: var(--green-dim); background: rgba(52,211,153,0.12); color: var(--green); }
+  .btn-retool.ready:hover { background: rgba(52,211,153,0.22); box-shadow: 0 0 10px rgba(52,211,153,0.15); }
+
+  /* Popover bubble */
+  .retool-popover-wrap { position: relative; display: inline-block; }
+  .retool-bubble {
+    display: none; position: fixed;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 12px 14px; width: 250px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.6); z-index: 9999;
+  }
+  .retool-bubble::after {
+    content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: var(--border2);
+  }
+  .retool-bubble.open { display: block; }
+  .retool-bubble-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  .retool-bubble textarea, .retool-bubble input[type=number] {
+    width: 100%; background: var(--surface3); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; color: var(--text);
+    font-family: var(--mono); font-size: 12px; outline: none;
+    transition: border-color 0.15s; resize: vertical;
+  }
+  .retool-bubble textarea { min-height: 72px; }
+  .retool-bubble textarea:focus, .retool-bubble input[type=number]:focus { border-color: var(--accent); }
+  .retool-bubble input[type=number] { -moz-appearance: textfield; }
+  .retool-bubble input[type=number]::-webkit-outer-spin-button,
+  .retool-bubble input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .bubble-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .bubble-save {
+    flex: 1; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--green-dim);
+    background: rgba(52,211,153,0.12); color: var(--green);
+    transition: all 0.15s;
+  }
+  .bubble-save:hover { background: rgba(52,211,153,0.22); }
+  .bubble-cancel {
+    padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface3); color: var(--muted); transition: all 0.15s;
+  }
+  .bubble-cancel:hover { border-color: var(--red); color: var(--red); }
+
+  /* Checkbox column */
+  .row-check { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+  td.check-cell { width: 32px; text-align: center; padding: 10px 6px; }
+  th.check-cell { width: 32px; text-align: center; padding: 10px 6px; }
+
+  /* Bulk send bar */
+  .bulk-bar {
+    display: none; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: rgba(61,111,255,0.08); border: 1px solid rgba(61,111,255,0.2);
+    border-radius: 8px; padding: 10px 16px; margin-bottom: 14px;
+  }
+  .bulk-bar.visible { display: flex; }
+  .bulk-bar-label { font-size: 13px; font-weight: 600; color: var(--accent2); flex: 1; }
+  .btn-bulk-send {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; transition: all 0.16s;
+  }
+  .btn-bulk-send:hover { background: var(--accent2); box-shadow: 0 4px 14px rgba(61,111,255,0.35); }
+  .btn-bulk-send:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+  .btn-bulk-clear {
+    padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text2); transition: all 0.15s;
+  }
+  .btn-bulk-clear:hover { border-color: var(--red); color: var(--red); }
+
+  .stats { display: grid; grid-template-columns: repeat(6,1fr); gap: 12px; margin-bottom: 24px; }
+  @media(max-width:1000px){ .stats { grid-template-columns: repeat(3,1fr); } }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 6px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .stat:hover { border-color: var(--border2); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+  .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .stat-value { font-size: 32px; font-weight: 700; line-height: 1; font-family: var(--mono); }
+  .stat-bar { height: 3px; border-radius: 2px; background: var(--border); margin-top: 4px; overflow: hidden; }
+  .stat-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+  .c-accent { color: var(--accent2); } .c-green { color: var(--green); }
+  .c-amber  { color: var(--amber);  } .c-purple{ color: var(--purple);}
+  .c-text   { color: var(--text);   } .c-red   { color: var(--red);   }
+
+  .upload-area {
+    background: var(--surface); border: 2px dashed var(--border);
+    border-radius: 10px; padding: 18px 24px; text-align: center;
+    cursor: pointer; transition: all 0.2s; margin-bottom: 20px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .upload-area:hover, .upload-area.drag { border-color: var(--accent); background: rgba(61,111,255,0.05); }
+  .upload-area p { font-size: 13px; color: var(--text2); }
+  .upload-area strong { color: var(--accent2); }
+
+  .controls { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-wrap { flex: 1; min-width: 220px; position: relative; }
+  .search-wrap input {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 7px; padding: 9px 12px 9px 36px;
+    color: var(--text); font-family: var(--sans); font-size: 13px;
+    outline: none; transition: border-color 0.16s;
+  }
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61,111,255,0.12); }
+  .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
+  select {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+    padding: 9px 12px; color: var(--text2); font-family: var(--sans); font-size: 13px;
+    cursor: pointer; outline: none; transition: border-color 0.16s; min-width: 160px;
+  }
+  select:focus, select:hover { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+
+  /* Multi-select status dropdown */
+  .ms-wrap { position: relative; display: inline-block; min-width: 160px; }
+  .ms-trigger {
+    width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+    padding: 9px 30px 9px 12px; color: var(--text2); font-family: var(--sans); font-size: 13px;
+    cursor: pointer; outline: none; transition: border-color 0.16s; text-align: left;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px;
+  }
+  .ms-trigger:hover, .ms-trigger.open { border-color: var(--accent); }
+  .ms-trigger::after { content: '▾'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 11px; pointer-events: none; }
+  .ms-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px;
+    min-width: 100%; padding: 6px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: none;
+  }
+  .ms-dropdown.open { display: block; }
+  .ms-option {
+    display: flex; align-items: center; gap: 9px; padding: 8px 14px;
+    font-size: 13px; font-family: var(--sans); color: var(--text2);
+    cursor: pointer; transition: background 0.1s; white-space: nowrap; user-select: none;
+  }
+  .ms-option:hover { background: var(--surface3); color: var(--text); }
+  .ms-option input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
+  .ms-option.checked { color: var(--text); }
+  .ms-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    background: rgba(61,111,255,0.15); border: 1px solid rgba(61,111,255,0.25);
+    color: var(--accent2); border-radius: 20px; padding: 1px 7px; font-size: 11px; font-family: var(--mono);
+  }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: visible; box-shadow: 0 4px 24px rgba(0,0,0,0.25); }
+  .table-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 20px; border-bottom: 1px solid var(--border); background: var(--surface2);
+  }
+  .table-toolbar-left { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 10px; }
+  .table-toolbar-right { font-family: var(--mono); font-size: 11px; color: var(--accent2); }
+  .count-badge {
+    font-size: 11px; background: var(--surface3); border: 1px solid var(--border2);
+    color: var(--text2); padding: 2px 8px; border-radius: 20px; font-weight: 500; font-family: var(--mono);
+  }
+  .table-scroll { overflow-x: auto; overflow-y: visible; }
+  table { width: 100%; border-collapse: collapse; min-width: 900px; table-layout: auto; }
+  thead th {
+    background: var(--navy); padding: 10px 10px;
+    text-align: left; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.07em; color: var(--text2);
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+    cursor: pointer; user-select: none; transition: color 0.15s;
+  }
+  thead th:hover { color: var(--accent2); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.received     { background: rgba(251,191,36,0.07); }
+  tbody tr.received:hover { background: rgba(251,191,36,0.11); }
+  td { padding: 10px 10px; font-size: 13px; vertical-align: top; }
+  td.mono { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  td.id-cell { font-family: var(--mono); font-size: 11px; color: var(--text2); white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  td.product-cell { white-space: normal; word-break: break-word; line-height: 1.5; min-width: 140px; max-width: 220px; font-size: 12px; }
+  .date-cell { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; font-family: var(--mono);
+    text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+  }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .badge-ORDERED    { background: rgba(61,111,255,0.14); color: var(--accent2); border: 1px solid rgba(61,111,255,0.2); }
+  .badge-ORDERED::before { background: var(--accent); }
+  .badge-SHIPPED    { background: rgba(251,191,36,0.12); color: var(--amber);   border: 1px solid rgba(251,191,36,0.2); }
+  .badge-SHIPPED::before { background: var(--amber); }
+  .badge-PROCESSING { background: rgba(167,139,250,0.12); color: var(--purple); border: 1px solid rgba(167,139,250,0.2); }
+  .badge-PROCESSING::before { background: var(--purple); }
+  .badge-RECEIVED   { background: rgba(52,211,153,0.12); color: var(--green);   border: 1px solid rgba(52,211,153,0.2); }
+  .badge-RECEIVED::before { background: var(--green); }
+  .badge-COMPLETED  { background: rgba(52,211,153,0.18); color: var(--green);   border: 1px solid rgba(52,211,153,0.35); }
+  .badge-COMPLETED::before { background: var(--green); box-shadow: 0 0 5px var(--green); }
+  .badge-NOT_RECEIVED { background: rgba(248,113,113,0.12); color: var(--red);    border: 1px solid rgba(248,113,113,0.2); }
+  .badge-NOT_RECEIVED::before { background: var(--red); }
+  .badge-PENDING    { background: rgba(91,132,255,0.12);  color: var(--accent2); border: 1px solid rgba(91,132,255,0.2); }
+  .badge-PENDING::before { background: var(--accent2); }
+  .badge-IN_TRANSIT { background: rgba(251,191,36,0.12);  color: var(--amber);   border: 1px solid rgba(251,191,36,0.2); }
+  .badge-IN_TRANSIT::before { background: var(--amber); }
+  .badge-OUT_FOR_DELIVERY { background: rgba(167,139,250,0.12); color: var(--purple); border: 1px solid rgba(167,139,250,0.2); }
+  .badge-OUT_FOR_DELIVERY::before { background: var(--purple); }
+  .badge-ARRIVED_AT_PROCESSING_FACILITY { background: rgba(52,211,153,0.08); color: var(--green); border: 1px solid rgba(52,211,153,0.15); }
+  .badge-ARRIVED_AT_PROCESSING_FACILITY::before { background: var(--green); }
+  .badge-PARTIALLY_RECEIVED { background: rgba(251,191,36,0.08); color: var(--amber); border: 1px solid rgba(251,191,36,0.15); }
+  .badge-PARTIALLY_RECEIVED::before { background: var(--amber); }
+
+  .new-tag {
+    font-size: 9px; font-weight: 700; font-family: var(--mono);
+    background: rgba(61,111,255,0.18); color: var(--accent2);
+    border: 1px solid rgba(61,111,255,0.3); padding: 1px 5px;
+    border-radius: 3px; margin-left: 5px; vertical-align: middle;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .empty { text-align: center; padding: 72px 24px; color: var(--muted); font-size: 13px; }
+  .empty-icon { font-size: 40px; display: block; margin-bottom: 14px; opacity: 0.25; }
+  .empty-title { font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text); padding: 12px 18px; border-radius: 9px;
+    font-size: 13px; z-index: 999;
+    transform: translateY(60px); opacity: 0; transition: all 0.22s;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toast::before { content: '✓'; color: var(--green); font-weight: 700; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .tracking-link { color: var(--accent2); text-decoration: none; font-family: var(--mono); font-size: 11px; }
+  .tracking-link:hover { text-decoration: underline; }
+  .comment-cell { min-width: 140px; max-width: 200px; }
+  .comment-input {
+    width: 100%; background: transparent; border: 1px solid transparent;
+    border-radius: 5px; padding: 4px 7px; color: var(--text2);
+    font-family: var(--sans); font-size: 12px; resize: none;
+    transition: all 0.15s; line-height: 1.4; min-height: 32px;
+    overflow: hidden;
+  }
+  .comment-input:hover { border-color: var(--border); background: var(--surface2); }
+  .comment-input:focus { border-color: var(--accent); background: var(--surface2);
+    outline: none; color: var(--text); box-shadow: 0 0 0 2px rgba(61,111,255,0.1); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-brand"><div class="topbar-brand-dot"></div>Firstbase Operations</div>
+    <span class="topbar-pill">Inbound</span>
+  </div>
+  <div class="topbar-right" style="display:flex;align-items:center;gap:12px;">
+    <span id="syncStatus" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)">
+      <span id="syncDot" style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>
+      <span id="syncText">Connecting…</span>
+    </span>
+    <span id="lastUpdated">No data loaded</span>
+  </div>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('inv')" id="tabBtn-inv">
+    📦 Inventory Orders <span class="tab-count" id="tabCount-inv">0</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('cs')" id="tabBtn-cs">
+    🚚 Customer Supplied Orders <span class="tab-count" id="tabCount-cs">0</span>
+  </button>
+</div>
+
+<!-- ═══ INVENTORY ORDERS TAB ═══ -->
+<div class="tab-panel active" id="panel-inv">
+<div class="app">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Inventory Orders</h1>
+      <p>Coventry UK · Germany EU · Oshawa CAN</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" onclick="document.getElementById('invFileInput').click()">↑ Upload CSV</button>
+      <button class="btn btn-danger" onclick="invClearAll()">Clear All</button>
+    </div>
+    <input type="file" id="invFileInput" accept=".csv" onchange="invHandleFile(event)">
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total Open</div><div class="stat-value c-text" id="inv-statTotal">0</div><div class="stat-bar"><div class="stat-bar-fill" style="width:100%;background:var(--border2)"></div></div></div>
+    <div class="stat"><div class="stat-label">Ordered</div><div class="stat-value c-accent" id="inv-statOrdered">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barOrdered" style="width:0%;background:var(--accent)"></div></div></div>
+    <div class="stat"><div class="stat-label">Processing</div><div class="stat-value c-purple" id="inv-statProcessing">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barProcessing" style="width:0%;background:var(--purple)"></div></div></div>
+    <div class="stat"><div class="stat-label">Shipped</div><div class="stat-value c-amber" id="inv-statShipped">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barShipped" style="width:0%;background:var(--amber)"></div></div></div>
+    <div class="stat"><div class="stat-label">Received in WH</div><div class="stat-value c-green" id="inv-statReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barReceived" style="width:0%;background:var(--green)"></div></div></div>
+    <div class="stat"><div class="stat-label">Completed</div><div class="stat-value c-green" id="inv-statCompleted">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barCompleted" style="width:0%;background:var(--green)"></div></div></div>
+  </div>
+
+  <div class="upload-area" id="invDropZone"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="invHandleDrop(event)"
+    onclick="document.getElementById('invFileInput').click()">
+    <p>↑ <strong>Drop Inventory CSV here</strong> or click to browse — only new orders from your 3 warehouses will be added</p>
+  </div>
+
+  <div class="bulk-bar" id="inv-bulkBar">
+    <div class="bulk-bar-label">
+      <span id="inv-bulkCount">0</span> orders selected
+      — make sure serials / quantities are entered before sending
+    </div>
+    <button class="btn-bulk-send" id="inv-bulkSendBtn" onclick="invBulkSend()">⬆ Send to Retool</button>
+    <button class="btn-bulk-clear" onclick="invClearSelection()">✕ Clear</button>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="inv-search" placeholder="Search by order ID, product, customer..." oninput="invRenderTable()">
+    </div>
+    <select id="inv-filterWarehouse" onchange="invRenderTable()">
+      <option value="">All Warehouses</option>
+      <option value="Warehouse - Coventry UK">Coventry UK</option>
+      <option value="Warehouse - Germany EU">Germany EU</option>
+      <option value="Warehouse - Oshawa CAN">Oshawa CAN</option>
+    </select>
+    <select id="inv-filterCustomer" onchange="invRenderTable()"><option value="">All Customers</option></select>
+    <div class="ms-wrap" id="inv-statusWrap">
+      <button class="ms-trigger" id="inv-statusTrigger" onclick="msToggle('inv-statusMenu', this)">All Statuses</button>
+      <div class="ms-dropdown" id="inv-statusMenu">
+        <label class="ms-option"><input type="checkbox" value="ORDERED" onchange="invRenderTable()"> Ordered</label>
+        <label class="ms-option"><input type="checkbox" value="PROCESSING" onchange="invRenderTable()"> Processing</label>
+        <label class="ms-option"><input type="checkbox" value="SHIPPED" onchange="invRenderTable()"> Shipped</label>
+        <label class="ms-option"><input type="checkbox" value="RECEIVED" onchange="invRenderTable()"> Received in WH</label>
+        <label class="ms-option"><input type="checkbox" value="COMPLETED" onchange="invRenderTable()"> Completed</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <div class="table-toolbar-left">Orders <span class="count-badge" id="inv-rowCount">0</span></div>
+      <div class="table-toolbar-right" id="inv-newCount"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th class="check-cell"><input type="checkbox" class="row-check" id="inv-checkAll" onchange="invToggleAll(this.checked)" title="Select all"></th>
+          <th onclick="invSortBy('inventory_order_id')">Order ID</th>
+          <th onclick="invSortBy('organization_name')">Customer</th>
+          <th>Copy</th>
+          <th onclick="invSortBy('product_title')">Product</th>
+          <th onclick="invSortBy('quantity')">Qty</th>
+          <th onclick="invSortBy('warehouse_name')">Warehouse</th>
+          <th onclick="invSortBy('purchase_number')">PO Number</th>
+          <th>Tracking</th>
+          <th onclick="invSortBy('appStatus')">Status</th>
+          <th onclick="invSortBy('created_at')">Created</th>
+          <th>Comments</th>
+          <th>Action</th>
+          <th>Retool</th>
+        </tr></thead>
+        <tbody id="inv-tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="inv-emptyState">
+      <span class="empty-icon">📦</span>
+      <div class="empty-title">No orders to display</div>
+      Upload a CSV to get started
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══ CUSTOMER SUPPLIED ORDERS TAB ═══ -->
+<div class="tab-panel" id="panel-cs">
+<div class="app">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Customer Supplied Orders</h1>
+      <p>Coventry UK · Germany EU · Oshawa CAN</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" onclick="document.getElementById('csFileInput').click()">↑ Upload CSV</button>
+      <button class="btn btn-danger" onclick="csClearAll()">Clear All</button>
+    </div>
+    <input type="file" id="csFileInput" accept=".csv" onchange="csHandleFile(event)">
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total Open</div><div class="stat-value c-text" id="cs-statTotal">0</div><div class="stat-bar"><div class="stat-bar-fill" style="width:100%;background:var(--border2)"></div></div></div>
+    <div class="stat"><div class="stat-label">Expected</div><div class="stat-value c-accent" id="cs-statExpected">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barExpected" style="width:0%;background:var(--accent)"></div></div></div>
+    <div class="stat"><div class="stat-label">Partially Received</div><div class="stat-value c-amber" id="cs-statPartiallyReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barPartiallyReceived" style="width:0%;background:var(--amber)"></div></div></div>
+    <div class="stat"><div class="stat-label">Received in WH</div><div class="stat-value c-green" id="cs-statReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barReceived" style="width:0%;background:var(--green)"></div></div></div>
+    <div class="stat"><div class="stat-label">Completed</div><div class="stat-value c-green" id="cs-statCompleted">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barCompleted" style="width:0%;background:var(--green)"></div></div></div>
+  </div>
+
+  <div class="upload-area" id="csDropZone"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="csHandleDrop(event)"
+    onclick="document.getElementById('csFileInput').click()">
+    <p>↑ <strong>Drop Customer Supplied CSV here</strong> or click to browse — only new shipments will be added</p>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="cs-search" placeholder="Search by customer, product, PO number, tracking..." oninput="csRenderTable()">
+    </div>
+    <select id="cs-filterWarehouse" onchange="csRenderTable()"><option value="">All Warehouses</option></select>
+    <select id="cs-filterCustomer" onchange="csRenderTable()"><option value="">All Customers</option></select>
+    <div class="ms-wrap" id="cs-statusWrap">
+      <button class="ms-trigger" id="cs-statusTrigger" onclick="msToggle('cs-statusMenu', this)">All Statuses</button>
+      <div class="ms-dropdown" id="cs-statusMenu">
+        <label class="ms-option"><input type="checkbox" value="EXPECTED" onchange="csRenderTable()"> Expected</label>
+        <label class="ms-option"><input type="checkbox" value="PARTIALLY_RECEIVED" onchange="csRenderTable()"> Partially Received</label>
+        <label class="ms-option"><input type="checkbox" value="RECEIVED" onchange="csRenderTable()"> Received in WH</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <div class="table-toolbar-left">Shipments <span class="count-badge" id="cs-rowCount">0</span></div>
+      <div class="table-toolbar-right" id="cs-newCount"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th onclick="csSortBy('customer_name')">Customer</th>
+          <th onclick="csSortBy('product_title')">Product</th>
+          <th onclick="csSortBy('expected_quantity')">Qty</th>
+          <th onclick="csSortBy('warehouse_name')">Warehouse</th>
+          <th onclick="csSortBy('purchase_order_number')">PO Number</th>
+          <th>Tracking</th>
+          <th onclick="csSortBy('appStatus')">Status</th>
+          <th onclick="csSortBy('order_date')">Created Date</th>
+          <th>Comments</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody id="cs-tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="cs-emptyState">
+      <span class="empty-icon">🚚</span>
+      <div class="empty-title">No shipments to display</div>
+      Upload a CSV to get started
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── GOOGLE SHEETS CONFIG ────────────────────────────────────────────────────
+// Paste your deployed Apps Script Web App URL here:
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwS0DZkZpQx4vyNIrF9jIFfLn11nBDUBqNsMTU43_WY_g1CzhmIkGJJJMHHvKCBC0CaYw/exec';
+const INV_SHEET = 'InvOrderState';
+const CS_SHEET  = 'CSOrderState';
+
+// ─── SYNC STATE ──────────────────────────────────────────────────────────────
+let sheetsReady = false;
+
+function setSyncStatus(state, text) {
+  // state: 'ok' | 'syncing' | 'error' | 'offline'
+  const dot  = document.getElementById('syncDot');
+  const txt  = document.getElementById('syncText');
+  const colors = { ok:'var(--green)', syncing:'var(--amber)', error:'var(--red)', offline:'var(--muted)' };
+  if (dot) dot.style.background = colors[state] || colors.offline;
+  if (txt) txt.textContent = text;
+}
+
+// ─── FETCH STATE FROM SHEETS ON LOAD ─────────────────────────────────────────
+async function sheetsLoadAll() {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('YOUR_APPS_SCRIPT')) {
+    setSyncStatus('offline', 'No URL set — local only');
+    return;
+  }
+  setSyncStatus('syncing', 'Loading from Sheets…');
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?sheet=all', { cache: 'no-store' });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown error');
+
+    // Merge inv state
+    if (json.inv) {
+      Object.entries(json.inv).forEach(([id, s]) => {
+        if (invOrders[id]) {
+          if (s.app_status) invOrders[id].appStatus = s.app_status;
+          if (s.received_at) invOrders[id].receivedAt = s.received_at;
+          if (s.comment)  allComments[id] = s.comment;
+          if (s.retool_data) invRetoolData[id] = s.retool_data;
+        }
+      });
+    }
+    // Merge cs state
+    if (json.cs) {
+      Object.entries(json.cs).forEach(([id, s]) => {
+        if (csOrders[id]) {
+          if (s.app_status) csOrders[id].appStatus = s.app_status;
+          if (s.received_at) csOrders[id].receivedAt = s.received_at;
+          if (s.comment)  allComments[id] = s.comment;
+        }
+      });
+    }
+
+    sheetsReady = true;
+    setSyncStatus('ok', 'Synced');
+    invSaveState(); csSaveState(); commentsSave();
+    invRenderAll(); csRenderAll();
+  } catch(err) {
+    setSyncStatus('error', 'Sheets error — using local');
+    console.error('Sheets load error:', err);
+  }
+}
+
+// ─── PUSH A SINGLE ROW TO SHEETS ─────────────────────────────────────────────
+async function sheetsPush(sheetName, orderId, payload) {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('YOUR_APPS_SCRIPT')) return;
+  setSyncStatus('syncing', 'Saving…');
+  try {
+    const body = { sheet: sheetName, order_id: orderId, ...payload };
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown error');
+    setSyncStatus('ok', 'Saved ✓');
+    setTimeout(() => setSyncStatus('ok', 'Synced'), 2000);
+  } catch(err) {
+    setSyncStatus('error', 'Save failed');
+    console.error('Sheets push error:', err);
+    setTimeout(() => setSyncStatus('ok', 'Synced'), 3000);
+  }
+}
+
+async function sheetsDelete(sheetName, orderId) {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('YOUR_APPS_SCRIPT')) return;
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ sheet: sheetName, order_id: orderId, action: 'delete' })
+    });
+  } catch(err) {
+    console.error('Sheets delete error:', err);
+  }
+}
+
+// ─── COMMENTS ────────────────────────────────────────────────────────────────
+const COMMENTS_KEY = 'inbound_tracker_comments_v1';
+let allComments = {};
+function commentsLoad() {
+  try { const s = localStorage.getItem(COMMENTS_KEY); if (s) allComments = JSON.parse(s); } catch(e) {}
+}
+function commentsSave() {
+  try { localStorage.setItem(COMMENTS_KEY, JSON.stringify(allComments)); } catch(e) {}
+}
+const _commentDebounce = {};
+function commentSet(id, val) {
+  if (val.trim() === '') { delete allComments[id]; } else { allComments[id] = val; }
+  commentsSave();
+  // Debounce Sheets push — 800ms after last keystroke
+  clearTimeout(_commentDebounce[id]);
+  _commentDebounce[id] = setTimeout(() => {
+    // Determine which sheet this ID belongs to
+    const sheetName = invOrders[id] ? INV_SHEET : CS_SHEET;
+    sheetsPush(sheetName, id, { comment: val.trim() });
+  }, 800);
+}
+function commentGet(id) { return allComments[id] || ''; }
+function commentInput(id) {
+  const escaped = id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const val = commentGet(id).replace(/"/g,'&quot;');
+  return `<textarea class="comment-input" rows="1"
+    onblur="commentSet('${escaped}', this.value)"
+    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+    placeholder="Add note…">${val}</textarea>`;
+}
+commentsLoad();
+function parseCSVLine(line) {
+  const r = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (inQ && line[i+1]==='"') { cur+='"'; i++; } else inQ=!inQ; }
+    else if (c===',' && !inQ) { r.push(cur); cur=''; }
+    else cur+=c;
+  }
+  r.push(cur); return r;
+}
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/);
+  const headers = parseCSVLine(lines[0]);
+  const rows = [];
+  for (let i=1;i<lines.length;i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVLine(lines[i]);
+    const row = {};
+    headers.forEach((h,j) => row[h.trim()]=(vals[j]||'').trim());
+    rows.push(row);
+  }
+  return rows;
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.childNodes[t.childNodes.length-1].textContent = ' '+msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+function fmtDate(d) { return d ? d.substring(0,10) : '—'; }
+function whLabel(w) { return (w||'').replace('Warehouse - ','').replace('Warehouse ',''); }
+
+// ─── MULTI-SELECT DROPDOWNS ───────────────────────────────────────────────────
+function msToggle(menuId, trigger) {
+  const menu = document.getElementById(menuId);
+  const isOpen = menu.classList.contains('open');
+  document.querySelectorAll('.ms-dropdown.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.ms-trigger.open').forEach(t => t.classList.remove('open'));
+  if (!isOpen) { menu.classList.add('open'); trigger.classList.add('open'); }
+}
+function msUpdateLabel(menu, trigger) {
+  const checked = [...menu.querySelectorAll('input:checked')];
+  trigger.innerHTML = '';
+  if (checked.length === 0) { trigger.textContent = 'All Statuses'; return; }
+  checked.slice(0,2).forEach(c => {
+    const chip = document.createElement('span'); chip.className = 'ms-chip';
+    chip.textContent = c.closest('.ms-option').textContent.trim();
+    trigger.appendChild(chip);
+  });
+  if (checked.length > 2) {
+    const more = document.createElement('span'); more.className = 'ms-chip';
+    more.textContent = `+${checked.length-2}`; trigger.appendChild(more);
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.ms-wrap')) {
+      document.querySelectorAll('.ms-dropdown.open').forEach(m => m.classList.remove('open'));
+      document.querySelectorAll('.ms-trigger.open').forEach(t => t.classList.remove('open'));
+    }
+  });
+  document.querySelectorAll('.ms-dropdown input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const menu = cb.closest('.ms-dropdown');
+      const trigger = menu.closest('.ms-wrap').querySelector('.ms-trigger');
+      cb.closest('.ms-option').classList.toggle('checked', cb.checked);
+      msUpdateLabel(menu, trigger);
+    });
+  });
+});
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  document.getElementById('tabBtn-'+tab).classList.add('active');
+}
+function updateTabCounts() {
+  document.getElementById('tabCount-inv').textContent = Object.keys(invOrders).length;
+  const csPOs = new Set(Object.values(csOrders).map(o=>o.purchase_order_number||o.shipment_notice_package_item_id));
+  document.getElementById('tabCount-cs').textContent = csPOs.size;
+}
+
+// ─── INVENTORY ORDERS ────────────────────────────────────────────────────────
+const INV_ALLOWED_WH    = new Set(['Warehouse - Coventry UK','Warehouse - Germany EU','Warehouse - Oshawa CAN']);
+const INV_SKIP_STATUSES = new Set(['COMPLETE','COMPLETED','CANCELLED']);
+
+let invOrders  = {};
+let invSortCol = 'created_at', invSortDir = -1;
+let invNewIds  = new Set();
+
+function invLoadState()  { try { const s=localStorage.getItem('inbound_tracker_inv_v1'); if(s) invOrders=JSON.parse(s).orders||{}; } catch(e){} }
+function invSaveState()  { try { localStorage.setItem('inbound_tracker_inv_v1', JSON.stringify({orders:invOrders})); } catch(e){} }
+function invClearAll()   {
+  if (!confirm('Clear all Inventory Orders?')) return;
+  invOrders={}; invNewIds.clear(); invSaveState(); invRenderAll();
+  showToast('Inventory Orders cleared');
+}
+function invHandleDrop(e) { e.preventDefault(); document.getElementById('invDropZone').classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f) invProcessFile(f); }
+function invHandleFile(e) { const f=e.target.files[0]; if(f) invProcessFile(f); e.target.value=''; }
+function invProcessFile(file) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const rows = parseCSV(ev.target.result);
+    let added=0; invNewIds.clear();
+    rows.forEach(row => {
+      const id = row.inventory_order_id; if (!id) return;
+      const wh = row.warehouse_name||'';
+      const status = (row.status||'').toUpperCase();
+      if (!INV_ALLOWED_WH.has(wh)) return;
+      if (INV_SKIP_STATUSES.has(status)) { if(invOrders[id]) delete invOrders[id]; return; }
+      if (!invOrders[id]) {
+        invOrders[id] = {...row, status, appStatus:status, addedAt:new Date().toISOString()};
+        invNewIds.add(id); added++;
+      } else {
+        if (invOrders[id].appStatus!=='RECEIVED' && invOrders[id].appStatus!=='COMPLETED') {
+          invOrders[id].status=status; invOrders[id].appStatus=status;
+        }
+      }
+    });
+    invSaveState();
+    document.getElementById('lastUpdated').textContent = `Last upload: ${new Date().toLocaleString()} — ${file.name}`;
+    invRenderAll(); showToast(`${added} new inventory orders added`);
+  };
+  reader.readAsText(file);
+}
+function invMarkReceived(id) {
+  if (!invOrders[id]) return;
+  invOrders[id].appStatus='RECEIVED'; invOrders[id].receivedAt=new Date().toISOString();
+  invSaveState(); invRenderAll(); showToast('Marked as Received in WH');
+  sheetsPush(INV_SHEET, id, { app_status:'RECEIVED', received_at: invOrders[id].receivedAt, comment: allComments[id]||'', retool_data: invRetoolData[id]||'' });
+}
+function invMarkCompleted(id) {
+  if (!invOrders[id]) return;
+  sheetsDelete(INV_SHEET, id);
+  delete invOrders[id]; invSaveState(); invRenderAll();
+  showToast('Marked as Completed — order removed');
+}
+function invCopyId(id, btn) {
+  navigator.clipboard.writeText(id).then(()=>{
+    btn.textContent='✓ copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='⎘ ID'; btn.classList.remove('copied'); },1800);
+  });
+}
+function invCopyIdProduct(id, product, btn) {
+  navigator.clipboard.writeText(id + ' ' + product).then(()=>{
+    btn.textContent='✓ copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='⎘ ID+Product'; btn.classList.remove('copied'); },1800);
+  });
+}
+function invUnreceive(id) {
+  if (!invOrders[id]) return;
+  invOrders[id].appStatus = invOrders[id].status || 'ORDERED';
+  delete invOrders[id].receivedAt;
+  invSaveState(); invRenderAll(); showToast('Marked as unreceived');
+  sheetsPush(INV_SHEET, id, { app_status: invOrders[id].appStatus, received_at:'', comment: allComments[id]||'', retool_data: invRetoolData[id]||'' });
+}
+function invUpdateFilters() {
+  const sel=document.getElementById('inv-filterCustomer'); const cur=sel.value;
+  const custs=[...new Set(Object.values(invOrders).map(o=>o.organization_name).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">All Customers</option>'+custs.map(c=>`<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
+}
+function invGetFiltered() {
+  const search=document.getElementById('inv-search').value.toLowerCase();
+  const wh=document.getElementById('inv-filterWarehouse').value;
+  const cust=document.getElementById('inv-filterCustomer').value;
+  const checked=[...document.querySelectorAll('#inv-statusMenu input:checked')].map(c=>c.value);
+  return Object.values(invOrders).filter(o=>{
+    if (wh   && o.warehouse_name!==wh)    return false;
+    if (cust && o.organization_name!==cust) return false;
+    if (checked.length && !checked.includes(o.appStatus)) return false;
+    if (search) { const hay=[o.inventory_order_id,o.organization_name,o.product_title,o.warehouse_name,o.tracking_number,o.purchase_number].join(' ').toLowerCase(); if(!hay.includes(search)) return false; }
+    return true;
+  });
+}
+function invSortBy(col) { if(invSortCol===col) invSortDir*=-1; else{invSortCol=col;invSortDir=1;} invRenderTable(); }
+function invRenderAll()  { invUpdateFilters(); invRenderTable(); invRenderStats(); updateTabCounts(); }
+function invRenderStats() {
+  const all=Object.values(invOrders); const total=all.length||1;
+  const c={ordered:0,processing:0,shipped:0,received:0,completed:0};
+  all.forEach(o=>{ if(o.appStatus==='ORDERED')c.ordered++; else if(o.appStatus==='PROCESSING')c.processing++; else if(o.appStatus==='SHIPPED')c.shipped++; else if(o.appStatus==='RECEIVED')c.received++; else if(o.appStatus==='COMPLETED')c.completed++; });
+  document.getElementById('inv-statTotal').textContent=all.length;
+  document.getElementById('inv-statOrdered').textContent=c.ordered;
+  document.getElementById('inv-statProcessing').textContent=c.processing;
+  document.getElementById('inv-statShipped').textContent=c.shipped;
+  document.getElementById('inv-statReceived').textContent=c.received;
+  document.getElementById('inv-statCompleted').textContent=c.completed;
+  document.getElementById('inv-barOrdered').style.width=(c.ordered/total*100)+'%';
+  document.getElementById('inv-barProcessing').style.width=(c.processing/total*100)+'%';
+  document.getElementById('inv-barShipped').style.width=(c.shipped/total*100)+'%';
+  document.getElementById('inv-barReceived').style.width=(c.received/total*100)+'%';
+  document.getElementById('inv-barCompleted').style.width=(c.completed/total*100)+'%';
+}
+function invRenderTable() {
+  const rows=invGetFiltered();
+  rows.sort((a,b)=>{ let av=a[invSortCol]||'',bv=b[invSortCol]||''; if(invSortCol==='quantity'){av=+av;bv=+bv;} return av<bv?-invSortDir:av>bv?invSortDir:0; });
+  const tbody=document.getElementById('inv-tableBody');
+  const empty=document.getElementById('inv-emptyState');
+  const newInView=rows.filter(r=>invNewIds.has(r.inventory_order_id)).length;
+  document.getElementById('inv-rowCount').textContent=rows.length;
+  document.getElementById('inv-newCount').textContent=newInView>0?`+${newInView} new this upload`:'';
+  if(rows.length===0){tbody.innerHTML='';empty.style.display='block';invUpdateBulkBar();return;}
+  empty.style.display='none';
+  tbody.innerHTML=rows.map(o=>{
+    const isNew=invNewIds.has(o.inventory_order_id);
+    const isRec=o.appStatus==='RECEIVED';
+    const eid=o.inventory_order_id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const eprod=(o.product_title||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const isChecked = invSelected.has(o.inventory_order_id);
+    let btn = isRec
+      ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="invUnreceive('${eid}')">↩ Unreceive</button><button class="btn-complete" onclick="invMarkCompleted('${eid}')">Mark Completed</button></div>`
+      : `<button class="btn-receive" onclick="invMarkReceived('${eid}')">Mark Received</button>`;
+    const lbl = o.appStatus==='RECEIVED'?'Received in WH': o.appStatus.charAt(0)+o.appStatus.slice(1).toLowerCase();
+    let tracking = '—';
+    if (o.tracking_url) tracking=`<a class="tracking-link" href="${o.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${o.tracking_number||'Track'}</a>`;
+    else if (o.tracking_number) tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.tracking_number}</span>`;
+
+    // Retool popover button
+    const isComputer = (o.category||'').toUpperCase()==='COMPUTER';
+    const savedVal = invRetoolData[o.inventory_order_id] || '';
+    const hasData = savedVal !== '';
+    const retoolBtnLabel = isComputer ? '⌨ Enter Serials' : '# Enter Qty';
+    const retoolBtn = `
+      <div class="retool-popover-wrap" id="popwrap-${o.inventory_order_id}">
+        <button class="btn-retool ${hasData?'ready':''}" onclick="invTogglePopover('${eid}', event)">${hasData ? '✓ ' : ''}${retoolBtnLabel}</button>
+        <div class="retool-bubble" id="bubble-${o.inventory_order_id}">
+          <div class="retool-bubble-title">${isComputer ? 'Serial Numbers (comma-separated)' : 'Quantity Received'}</div>
+          ${isComputer
+            ? `<textarea placeholder="SN001, SN002, SN003..." id="retool-input-${o.inventory_order_id}" onkeydown="event.stopPropagation()">${savedVal}</textarea>`
+            : `<input type="number" min="1" max="${o.quantity||999}" value="${savedVal || (o.quantity||'')}" id="retool-input-${o.inventory_order_id}" onkeydown="event.stopPropagation()">`
+          }
+          <div class="bubble-actions">
+            <button class="bubble-save" onclick="invSaveRetoolData('${eid}')">Save</button>
+            <button class="bubble-cancel" onclick="invClosePopover('${eid}')">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+
+    return `<tr class="${isRec?'received':''}">
+      <td class="check-cell"><input type="checkbox" class="row-check inv-row-check" data-id="${o.inventory_order_id}" ${isChecked?'checked':''} onchange="invToggleSelect('${eid}', this.checked)"></td>
+      <td class="id-cell">${o.inventory_order_id}${isNew?'<span class="new-tag">new</span>':''}</td>
+      <td>${o.organization_name||'—'}</td>
+      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="invCopyId('${eid}',this)">⎘ ID</button><button class="btn-copy" onclick="invCopyIdProduct('${eid}','${eprod}',this)">⎘ ID+Product</button></div></td>
+      <td class="product-cell">${o.product_title||'—'}</td>
+      <td class="mono">${o.quantity||'—'}</td>
+      <td class="mono">${whLabel(o.warehouse_name||'')}</td>
+      <td class="mono">${o.purchase_number||'—'}</td>
+      <td class="mono" style="max-width:130px;overflow:hidden">${tracking}</td>
+      <td><span class="badge badge-${o.appStatus}">${lbl}</span></td>
+      <td class="date-cell">${fmtDate(o.created_at)}</td>
+      <td class="comment-cell">${commentInput(o.inventory_order_id)}</td>
+      <td>${btn}</td>
+      <td>${retoolBtn}</td></tr>`;
+  }).join('');
+  invUpdateBulkBar();
+}
+
+// ─── RETOOL INTEGRATION ──────────────────────────────────────────────────────
+let invSelected   = new Set();  // selected order IDs for bulk send
+let invRetoolData = {};         // { [inventory_order_id]: serialsString | qtyString }
+
+function invToggleSelect(id, checked) {
+  if (checked) invSelected.add(id); else invSelected.delete(id);
+  invUpdateBulkBar();
+}
+function invToggleAll(checked) {
+  const checkboxes = document.querySelectorAll('.inv-row-check');
+  checkboxes.forEach(cb => {
+    const id = cb.dataset.id;
+    cb.checked = checked;
+    if (checked) invSelected.add(id); else invSelected.delete(id);
+  });
+  invUpdateBulkBar();
+}
+function invClearSelection() {
+  invSelected.clear();
+  document.querySelectorAll('.inv-row-check').forEach(cb => cb.checked = false);
+  const ca = document.getElementById('inv-checkAll'); if(ca) ca.checked = false;
+  invUpdateBulkBar();
+}
+function invUpdateBulkBar() {
+  const bar = document.getElementById('inv-bulkBar');
+  const cnt = document.getElementById('inv-bulkCount');
+  if (!bar) return;
+  if (invSelected.size > 0) { bar.classList.add('visible'); cnt.textContent = invSelected.size; }
+  else { bar.classList.remove('visible'); }
+}
+
+// Popover
+function invTogglePopover(id, e) {
+  e.stopPropagation();
+  const bubble = document.getElementById('bubble-' + id);
+  if (!bubble) return;
+  const isOpen = bubble.classList.contains('open');
+  // close all open bubbles first
+  document.querySelectorAll('.retool-bubble.open').forEach(b => b.classList.remove('open'));
+  if (!isOpen) {
+    // Position bubble above the button using fixed coords
+    const btn = e.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    bubble.style.left = (rect.left + rect.width / 2 - 125) + 'px';
+    bubble.style.top = (rect.top - 8) + 'px';
+    bubble.style.transform = 'translateY(-100%)';
+    bubble.classList.add('open');
+  }
+}
+function invClosePopover(id) {
+  const bubble = document.getElementById('bubble-' + id);
+  if (bubble) bubble.classList.remove('open');
+}
+function invSaveRetoolData(id) {
+  const input = document.getElementById('retool-input-' + id);
+  if (!input) return;
+  const val = input.value.trim();
+  if (val) invRetoolData[id] = val; else delete invRetoolData[id];
+  invClosePopover(id);
+  invRenderTable(); // re-render to update button state
+  // Sync retool data to Sheets
+  const o = invOrders[id];
+  if (o) sheetsPush(INV_SHEET, id, { app_status: o.appStatus, received_at: o.receivedAt||'', comment: allComments[id]||'', retool_data: val });
+}
+// Close popovers when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.retool-popover-wrap')) {
+    document.querySelectorAll('.retool-bubble.open').forEach(b => b.classList.remove('open'));
+  }
+});
+
+// ─── BULK SEND TO RETOOL ─────────────────────────────────────────────────────
+async function invBulkSend() {
+  const ids = [...invSelected];
+  if (ids.length === 0) { showToast('No orders selected'); return; }
+
+  // Check all selected orders have data entered
+  const missing = ids.filter(id => !invRetoolData[id]);
+  if (missing.length > 0) {
+    const orders = missing.map(id => {
+      const o = invOrders[id];
+      return o ? (o.product_title||id).substring(0,40) : id;
+    });
+    if (!confirm(`${missing.length} order(s) have no serials/qty entered:\n\n${orders.join('\n')}\n\nContinue anyway?`)) return;
+  }
+
+  const btn = document.getElementById('inv-bulkSendBtn');
+  btn.disabled = true;
+  btn.textContent = 'Opening Retool...';
+
+  // Open Retool in a new tab
+  const retoolUrl = 'https://firstbase.retool.com/apps/e2b95c44-ac95-11ed-86f6-9b2bac97cfc8/Ops%20Apps/Inventory%20Orders%20Management#inventory_order_id=';
+  const retoolTab = window.open(retoolUrl, 'retool_inbound');
+
+  showToast(`Ready — ${ids.length} order IDs to process in Retool`);
+
+  // Copy all order IDs to clipboard for easy pasting
+  const idList = ids.join('\n');
+  try {
+    await navigator.clipboard.writeText(ids.join(', '));
+    showToast(`${ids.length} order IDs copied to clipboard`);
+  } catch(e) {}
+
+  btn.disabled = false;
+  btn.textContent = '⬆ Send to Retool';
+}
+
+// ─── CUSTOMER SUPPLIED ORDERS ─────────────────────────────────────────────────
+const CS_SHOW_STATUSES = new Set(['PARTIALLY_RECEIVED','EXPECTED']);
+const CS_SKIP_STATUSES = new Set(); // everything not in SHOW is ignored
+
+let csOrders  = {};
+let csSortCol = 'order_date', csSortDir = -1;
+let csNewIds  = new Set();
+
+function csLoadState()  { try { const s=localStorage.getItem('inbound_tracker_cs_v1'); if(s) csOrders=JSON.parse(s).orders||{}; } catch(e){} }
+function csSaveState()  { try { localStorage.setItem('inbound_tracker_cs_v1', JSON.stringify({orders:csOrders})); } catch(e){} }
+function csClearAll()   {
+  if (!confirm('Clear all Customer Supplied Orders?')) return;
+  csOrders={}; csNewIds.clear(); csSaveState(); csRenderAll();
+  showToast('Customer Supplied Orders cleared');
+}
+function csHandleDrop(e) { e.preventDefault(); document.getElementById('csDropZone').classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f) csProcessFile(f); }
+function csHandleFile(e) { const f=e.target.files[0]; if(f) csProcessFile(f); e.target.value=''; }
+function csProcessFile(file) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const rows = parseCSV(ev.target.result);
+    let added=0; csNewIds.clear();
+    const threeMonthsAgo = new Date(); threeMonthsAgo.setMonth(threeMonthsAgo.getMonth()-3);
+    rows.forEach(row => {
+      const id = row.shipment_notice_package_item_id; if (!id) return;
+      const pkgStatus = (row.shipment_notice_package_item_status||'').toUpperCase();
+      // Skip Partially Received older than 3 months
+      if (pkgStatus === 'PARTIALLY_RECEIVED') {
+        const orderDate = new Date(row.order_date);
+        if (!isNaN(orderDate) && orderDate < threeMonthsAgo) { if(csOrders[id]) delete csOrders[id]; return; }
+      }
+      if (!CS_SHOW_STATUSES.has(pkgStatus)) { if(csOrders[id]) delete csOrders[id]; return; }
+      if (!csOrders[id]) {
+        csOrders[id] = {...row, appStatus:pkgStatus, _origStatus:pkgStatus, addedAt:new Date().toISOString()};
+        csNewIds.add(id); added++;
+      } else {
+        if (csOrders[id].appStatus !== 'RECEIVED') {
+          csOrders[id] = {...csOrders[id], ...row, appStatus:pkgStatus, _origStatus:pkgStatus};
+        }
+      }
+    });
+    csSaveState();
+    document.getElementById('lastUpdated').textContent = `Last upload: ${new Date().toLocaleString()} — ${file.name}`;
+    csRenderAll(); showToast(`${added} new customer supplied shipments added`);
+  };
+  reader.readAsText(file);
+}
+function csMarkReceived(id) {
+  if (!csOrders[id]) return;
+  csOrders[id].appStatus='RECEIVED'; csOrders[id].receivedAt=new Date().toISOString();
+  csSaveState(); csRenderAll(); showToast('Marked as Received in WH');
+  sheetsPush(CS_SHEET, id, { app_status:'RECEIVED', received_at: csOrders[id].receivedAt, comment: allComments[id]||'' });
+}
+function csUnreceive(id) {
+  if (!csOrders[id]) return;
+  csOrders[id].appStatus = csOrders[id]._origStatus || 'EXPECTED';
+  delete csOrders[id].receivedAt;
+  csSaveState(); csRenderAll(); showToast('Marked as unreceived');
+  sheetsPush(CS_SHEET, id, { app_status: csOrders[id].appStatus, received_at:'', comment: allComments[id]||'' });
+}
+function csMarkCompleted(id) {
+  if (!csOrders[id]) return;
+  sheetsDelete(CS_SHEET, id);
+  delete csOrders[id]; csSaveState(); csRenderAll();
+  showToast('Marked as Completed — shipment removed');
+}
+function csUpdateFilters() {
+  const custSel=document.getElementById('cs-filterCustomer'); const curC=custSel.value;
+  const custs=[...new Set(Object.values(csOrders).map(o=>o.customer_name).filter(Boolean))].sort();
+  custSel.innerHTML='<option value="">All Customers</option>'+custs.map(c=>`<option value="${c}" ${c===curC?'selected':''}>${c}</option>`).join('');
+  const whSel=document.getElementById('cs-filterWarehouse'); const curW=whSel.value;
+  const whs=[...new Set(Object.values(csOrders).map(o=>o.warehouse_name).filter(Boolean))].sort();
+  whSel.innerHTML='<option value="">All Warehouses</option>'+whs.map(w=>`<option value="${w}" ${w===curW?'selected':''}>${whLabel(w)}</option>`).join('');
+}
+function csGetFiltered() {
+  const search=document.getElementById('cs-search').value.toLowerCase();
+  const wh=document.getElementById('cs-filterWarehouse').value;
+  const cust=document.getElementById('cs-filterCustomer').value;
+  const checked=[...document.querySelectorAll('#cs-statusMenu input:checked')].map(c=>c.value);
+  return Object.values(csOrders).filter(o=>{
+    if (wh   && o.warehouse_name!==wh)  return false;
+    if (cust && o.customer_name!==cust) return false;
+    if (checked.length && !checked.includes(o.appStatus)) return false;
+    if (search) { const hay=[o.customer_name,o.product_title,o.warehouse_name,o.purchase_order_number,o.tracking_code].join(' ').toLowerCase(); if(!hay.includes(search)) return false; }
+    return true;
+  });
+}
+function csSortBy(col) { if(csSortCol===col) csSortDir*=-1; else{csSortCol=col;csSortDir=1;} csRenderTable(); }
+function csRenderAll()  { csUpdateFilters(); csRenderTable(); csRenderStats(); updateTabCounts(); }
+function csRenderStats() {
+  const all=Object.values(csOrders);
+  // Count unique shipments by PO number (or by id if no PO)
+  function countShipments(items) {
+    const pos = new Set();
+    items.forEach(o => pos.add(o.purchase_order_number || o.shipment_notice_package_item_id));
+    return pos.size;
+  }
+  const total=countShipments(all)||1;
+  const expected=all.filter(o=>o.appStatus==='EXPECTED');
+  const partRec=all.filter(o=>o.appStatus==='PARTIALLY_RECEIVED');
+  const received=all.filter(o=>o.appStatus==='RECEIVED');
+  const c={expected:countShipments(expected),partiallyReceived:countShipments(partRec),received:countShipments(received),completed:0};
+  document.getElementById('cs-statTotal').textContent=total;
+  document.getElementById('cs-statExpected').textContent=c.expected;
+  document.getElementById('cs-statPartiallyReceived').textContent=c.partiallyReceived;
+  document.getElementById('cs-statReceived').textContent=c.received;
+  document.getElementById('cs-statCompleted').textContent=c.completed;
+  document.getElementById('cs-barExpected').style.width=(c.expected/total*100)+'%';
+  document.getElementById('cs-barPartiallyReceived').style.width=(c.partiallyReceived/total*100)+'%';
+  document.getElementById('cs-barReceived').style.width=(c.received/total*100)+'%';
+  document.getElementById('cs-barCompleted').style.width='0%';
+}
+const CS_BADGE_LABELS = {
+  'EXPECTED':'Expected','PARTIALLY_RECEIVED':'Partially Received','RECEIVED':'Received in WH'
+};
+function csRenderTable() {
+  const rows=csGetFiltered();
+  rows.sort((a,b)=>{ let av=a[csSortCol]||'',bv=b[csSortCol]||''; if(csSortCol==='expected_quantity'){av=+av;bv=+bv;} return av<bv?-csSortDir:av>bv?csSortDir:0; });
+  const tbody=document.getElementById('cs-tableBody');
+  const empty=document.getElementById('cs-emptyState');
+  const newInView=rows.filter(r=>csNewIds.has(r.shipment_notice_package_item_id)).length;
+  document.getElementById('cs-rowCount').textContent=rows.length;
+  document.getElementById('cs-newCount').textContent=newInView>0?`+${newInView} new this upload`:'';
+  if(rows.length===0){tbody.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  tbody.innerHTML=rows.map(o=>{
+    const id=o.shipment_notice_package_item_id;
+    const isNew=csNewIds.has(id);
+    const isRec=o.appStatus==='RECEIVED';
+    const eid=id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    let btn = isRec
+      ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="csUnreceive('${eid}')">↩ Unreceive</button><button class="btn-complete" onclick="csMarkCompleted('${eid}')">Mark Completed</button></div>`
+      : `<button class="btn-receive" onclick="csMarkReceived('${eid}')">Mark Received</button>`;
+    let tracking;
+    if (o.tracking_url) tracking=`<a class="tracking-link" href="${o.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${o.tracking_code||''}">${o.tracking_code||'Track'}</a>`;
+    else if (o.tracking_code) tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.tracking_code}">${o.tracking_code}</span>`;
+    else tracking='—';
+    return `<tr class="${isRec?'received':''}">
+      <td>${o.customer_name||'—'}${isNew?'<span class="new-tag">new</span>':''}</td>
+      <td class="product-cell">${o.product_title||'—'}</td>
+      <td class="mono">${o.expected_quantity||'—'}</td>
+      <td class="mono">${whLabel(o.warehouse_name||'')}</td>
+      <td class="mono">${o.purchase_order_number||'—'}</td>
+      <td style="max-width:130px;overflow:hidden">${tracking}</td>
+      <td><span class="badge badge-${o.appStatus}">${CS_BADGE_LABELS[o.appStatus]||o.appStatus}</span></td>
+      <td class="date-cell">${fmtDate(o.order_date)}</td>
+      <td class="comment-cell">${commentInput(id)}</td>
+      <td>${btn}</td></tr>`;
+  }).join('');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+invLoadState(); csLoadState(); commentsLoad();
+invRenderAll(); csRenderAll();
+const invN=Object.keys(invOrders).length, csN=Object.keys(csOrders).length;
+if(invN>0||csN>0) document.getElementById('lastUpdated').textContent=`${invN} inventory + ${csN} customer supplied orders loaded from previous session`;
+// Load Sheets state and merge on top of local
+sheetsLoadAll();
+</script>
+</body>
+</html>
