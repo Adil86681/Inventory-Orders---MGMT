@@ -750,7 +750,13 @@ function parseCSV(text) {
 }
 function showToast(msg) {
   const t = document.getElementById('toast');
-  t.childNodes[t.childNodes.length-1].textContent = ' '+msg;
+  if (!t) return;
+  t.textContent = '';
+  const check = document.createElement('span');
+  check.style.cssText = 'color:var(--green);font-weight:700;margin-right:6px';
+  check.textContent = '✓';
+  t.appendChild(check);
+  t.appendChild(document.createTextNode(' ' + msg));
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
 }
