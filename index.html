@@ -575,6 +575,7 @@
         <thead><tr>
           <th onclick="csSortBy('customer_name')">Customer</th>
           <th onclick="csSortBy('product_title')">Product</th>
+          <th>Copy</th>
           <th onclick="csSortBy('expected_quantity')">Qty</th>
           <th onclick="csSortBy('warehouse_name')">Warehouse</th>
           <th onclick="csSortBy('purchase_order_number')">PO Number</th>
@@ -870,15 +871,19 @@ function invMarkCompleted(id) {
   showToast('Marked as Completed — order removed');
 }
 function invCopyId(id, btn) {
-  navigator.clipboard.writeText(id).then(()=>{
+  const o = invOrders[id];
+  const sku = (o && o.sku_id) ? o.sku_id : id;
+  navigator.clipboard.writeText(sku).then(()=>{
     btn.textContent='✓ copied'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='⎘ ID'; btn.classList.remove('copied'); },1800);
+    setTimeout(()=>{ btn.textContent='⎘ SKU'; btn.classList.remove('copied'); },1800);
   });
 }
 function invCopyIdProduct(id, product, btn) {
-  navigator.clipboard.writeText(id + ' ' + product).then(()=>{
+  const o = invOrders[id];
+  const sku = (o && o.sku_id) ? o.sku_id : id;
+  navigator.clipboard.writeText(sku + '\n' + product).then(()=>{
     btn.textContent='✓ copied'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='⎘ ID+Product'; btn.classList.remove('copied'); },1800);
+    setTimeout(()=>{ btn.textContent='⎘ SKU+Product'; btn.classList.remove('copied'); },1800);
   });
 }
 function invUnreceive(id) {
@@ -973,7 +978,7 @@ function invRenderTable() {
       <td class="check-cell"><input type="checkbox" class="row-check inv-row-check" data-id="${o.inventory_order_id}" ${isChecked?'checked':''} onchange="invToggleSelect('${eid}', this.checked)"></td>
       <td class="id-cell">${o.inventory_order_id}${isNew?'<span class="new-tag">new</span>':''}</td>
       <td>${o.organization_name||'—'}</td>
-      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="invCopyId('${eid}',this)">⎘ ID</button><button class="btn-copy" onclick="invCopyIdProduct('${eid}','${eprod}',this)">⎘ ID+Product</button></div></td>
+      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="invCopyId('${eid}',this)">⎘ SKU</button><button class="btn-copy" onclick="invCopyIdProduct('${eid}','${eprod}',this)">⎘ SKU+Product</button></div></td>
       <td class="product-cell">${o.product_title||'—'}</td>
       <td class="mono">${o.quantity||'—'}</td>
       <td class="mono">${whLabel(o.warehouse_name||'')}</td>
@@ -1093,6 +1098,24 @@ async function invBulkSend() {
 
   btn.disabled = false;
   btn.textContent = '⬆ Send to Retool';
+}
+
+// ─── CUSTOMER SUPPLIED COPY ──────────────────────────────────────────────────
+function csCopyId(id, btn) {
+  const o = csOrders[id];
+  const sku = (o && o.sku_id) ? o.sku_id : id;
+  navigator.clipboard.writeText(sku).then(()=>{
+    btn.textContent='✓ copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='⎘ SKU'; btn.classList.remove('copied'); },1800);
+  });
+}
+function csCopyIdProduct(id, product, btn) {
+  const o = csOrders[id];
+  const sku = (o && o.sku_id) ? o.sku_id : id;
+  navigator.clipboard.writeText(sku + '\n' + product).then(()=>{
+    btn.textContent='✓ copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='⎘ SKU+Product'; btn.classList.remove('copied'); },1800);
+  });
 }
 
 // ─── CUSTOMER SUPPLIED ORDERS ─────────────────────────────────────────────────
@@ -1225,6 +1248,7 @@ function csRenderTable() {
     const isNew=csNewIds.has(id);
     const isRec=o.appStatus==='RECEIVED';
     const eid=id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const ceprod=(o.product_title||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
     let btn = isRec
       ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="csUnreceive('${eid}')">↩ Unreceive</button><button class="btn-complete" onclick="csMarkCompleted('${eid}')">Mark Completed</button></div>`
       : `<button class="btn-receive" onclick="csMarkReceived('${eid}')">Mark Received</button>`;
@@ -1235,6 +1259,7 @@ function csRenderTable() {
     return `<tr class="${isRec?'received':''}">
       <td>${o.customer_name||'—'}${isNew?'<span class="new-tag">new</span>':''}</td>
       <td class="product-cell">${o.product_title||'—'}</td>
+      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="csCopyId('${eid}',this)">⎘ SKU</button><button class="btn-copy" onclick="csCopyIdProduct('${eid}','${ceprod}',this)">⎘ SKU+Product</button></div></td>
       <td class="mono">${o.expected_quantity||'—'}</td>
       <td class="mono">${whLabel(o.warehouse_name||'')}</td>
       <td class="mono">${o.purchase_order_number||'—'}</td>
