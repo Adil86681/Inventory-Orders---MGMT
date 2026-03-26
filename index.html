@@ -644,6 +644,7 @@
     </div>
     <div class="page-actions">
       <button class="btn btn-primary" onclick="mgmtRefresh()">↻ Refresh from MGMT</button>
+      <button class="btn" style="background:var(--surface2);border-color:var(--border);color:var(--text2)" onclick="mgmtShowBookmarklet()">📎 Setup Bookmarklet</button>
       <button class="btn btn-danger" onclick="mgmtClearAll()">Clear All</button>
     </div>
   </div>
@@ -1487,9 +1488,106 @@ function mgmtIngestRows(rows) {
   return added;
 }
 
-// Refresh button: prompts user to go to MGMT, copy data via bookmarklet
-function mgmtRefresh() {
-  showToast('Open MGMT in your browser — I will re-scrape and bulkWrite to the sheet');
+// Refresh: fetch latest data from the MGMTOrders sheet (populated by bookmarklet)
+async function mgmtRefresh() {
+  const btn = document.querySelector('button[onclick="mgmtRefresh()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Fetching…'; }
+
+  try {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('YOUR_APPS_SCRIPT')) {
+      throw new Error('No Apps Script URL configured');
+    }
+    const res = await fetch(APPS_SCRIPT_URL + '?sheet=mgmt', { cache: 'no-store' });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Unknown error');
+
+    let added = 0, updated = 0;
+    if (json.mgmt) {
+      Object.entries(json.mgmt).forEach(([id, s]) => {
+        if (!mgmtOrders[id]) {
+          // New order from sheet — ingest it
+          mgmtOrders[id] = {
+            order_id: id,
+            submitter:     s.submitter     || '',
+            created_date:  s.created_date  || '',
+            org:           s.org           || '',
+            warehouse:     s.warehouse     || '',
+            mgmt_status:   s.mgmt_status   || 'Processing',
+            customer_po:   s.customer_po   || '',
+            appStatus:     s.app_status    || 'PROCESSING',
+            receivedAt:    s.received_at   || '',
+            addedAt:       new Date().toISOString()
+          };
+          if (s.comment) allComments[id] = s.comment;
+          added++;
+        } else {
+          // Existing — only update app_status/received_at/comment if sheet has newer data
+          if (s.app_status && mgmtOrders[id].appStatus === 'PROCESSING') {
+            mgmtOrders[id].appStatus = s.app_status; updated++;
+          }
+          if (s.received_at) mgmtOrders[id].receivedAt = s.received_at;
+          if (s.comment) allComments[id] = s.comment;
+        }
+      });
+    }
+
+    mgmtSaveState(); commentsSave();
+    mgmtRenderAll();
+    const msg = added > 0 ? `${added} new orders added` : updated > 0 ? `${updated} orders updated` : 'Already up to date';
+    showToast(`Refresh complete — ${msg}`);
+    document.getElementById('mgmt-lastRefresh').textContent =
+      `Last refresh: ${new Date().toLocaleTimeString()}`;
+
+  } catch (err) {
+    showToast('Refresh failed — run the bookmarklet on the MGMT page first');
+    console.warn('mgmtRefresh error:', err);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh from MGMT'; }
+  }
+}
+
+// Generate and show the bookmarklet modal
+function mgmtShowBookmarklet() {
+  const url = APPS_SCRIPT_URL;
+  const script = `(function(){
+const rows=[];
+document.querySelectorAll('table tbody tr').forEach(tr=>{
+  const c=tr.querySelectorAll('td');if(c.length<7)return;
+  const id=(c[0].querySelector('a')||c[0]).textContent.trim();
+  const t=c[0].innerText.trim().split('\\n');
+  const sub=t.length>1?t.slice(1).join(' ').trim():'';
+  const wh=c[4].innerText.trim();if(wh.includes('SLC'))return;
+  rows.push([id,sub,c[1].innerText.trim().replace('\\n',' '),c[3].innerText.trim(),wh,c[6].innerText.trim(),(c[7]?c[7].innerText.trim().replace('—',''):'')])
+});
+if(!rows.length){alert('No rows found — make sure filters are set');return;}
+const sheetRows=rows.map(r=>[r[0],r[1],r[2],r[3],r[4],r[5],r[6],'PROCESSING','','','']);
+fetch('${url}',{method:'POST',mode:'no-cors',body:JSON.stringify({sheet:'MGMTOrders',action:'bulkWrite',rows:sheetRows})});
+alert('Sent '+rows.length+' orders to sheet. Now click Refresh in your tracker.');
+})();`;
+
+  const encoded = 'javascript:' + encodeURIComponent(script);
+  const existing = document.getElementById('mgmt-bookmarklet-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'mgmt-bookmarklet-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:28px;max-width:480px;width:90%;font-family:var(--sans)">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">📎 MGMT Refresh Bookmarklet</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">
+        Drag the button below to your bookmarks bar. Then on the MGMT page, click it to push all orders to the sheet. Come back here and click <strong>Refresh from MGMT</strong>.
+      </p>
+      <div style="text-align:center;margin-bottom:20px">
+        <a href="${encoded}" style="display:inline-block;padding:10px 20px;background:var(--accent);color:#fff;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;cursor:grab" draggable="true">
+          📤 Send MGMT Orders to Sheet
+        </a>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:16px">If dragging doesn't work, right-click the button → "Bookmark this link".</p>
+      <button onclick="document.getElementById('mgmt-bookmarklet-modal').remove()" style="width:100%;padding:8px;border-radius:7px;border:1px solid var(--border);background:var(--surface3);color:var(--text2);cursor:pointer;font-size:13px">Close</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
 // Merge state from Sheets (app_status, received_at, comment)
