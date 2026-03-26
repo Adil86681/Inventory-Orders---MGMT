@@ -430,6 +430,9 @@
   <button class="tab-btn" onclick="switchTab('cs')" id="tabBtn-cs">
     🚚 Customer Supplied Orders <span class="tab-count" id="tabCount-cs">0</span>
   </button>
+  <button class="tab-btn" onclick="switchTab('mgmt')" id="tabBtn-mgmt">
+    🏢 Inventory Orders - MGMT <span class="tab-count" id="tabCount-mgmt">0</span>
+  </button>
 </div>
 
 <!-- ═══ INVENTORY ORDERS TAB ═══ -->
@@ -631,6 +634,80 @@
 </div>
 </div>
 
+<!-- ═══ INVENTORY ORDERS - MGMT TAB ═══ -->
+<div class="tab-panel" id="panel-mgmt">
+<div class="app">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Inventory Orders - MGMT</h1>
+      <p>Processing · Non-SLC Warehouses · Live from Firstbase MGMT</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" onclick="mgmtRefresh()">↻ Refresh from MGMT</button>
+      <button class="btn btn-danger" onclick="mgmtClearAll()">Clear All</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total</div><div class="stat-value c-text" id="mgmt-statTotal">0</div><div class="stat-bar"><div class="stat-bar-fill" style="width:100%;background:var(--border2)"></div></div></div>
+    <div class="stat"><div class="stat-label">Processing</div><div class="stat-value c-purple" id="mgmt-statProcessing">0</div><div class="stat-bar"><div class="stat-bar-fill" id="mgmt-barProcessing" style="width:0%;background:var(--purple)"></div></div></div>
+    <div class="stat"><div class="stat-label">Received in WH</div><div class="stat-value c-green" id="mgmt-statReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="mgmt-barReceived" style="width:0%;background:var(--green)"></div></div></div>
+    <div class="stat"><div class="stat-label">Completed</div><div class="stat-value c-green" id="mgmt-statCompleted">0</div><div class="stat-bar"><div class="stat-bar-fill" id="mgmt-barCompleted" style="width:0%;background:var(--green)"></div></div></div>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="mgmt-search" placeholder="Search by order ID, org, warehouse, PO..." oninput="mgmtRenderTable()">
+    </div>
+    <div class="ms-wrap" id="mgmt-warehouseWrap">
+      <button class="ms-trigger" id="mgmt-warehouseTrigger" data-all-label="All Warehouses" onclick="msToggle('mgmt-warehouseMenu', this)">All Warehouses</button>
+      <div class="ms-dropdown" id="mgmt-warehouseMenu"></div>
+    </div>
+    <div class="ms-wrap" id="mgmt-orgWrap">
+      <button class="ms-trigger" id="mgmt-orgTrigger" data-all-label="All Orgs" onclick="msToggle('mgmt-orgMenu', this)">All Orgs</button>
+      <div class="ms-dropdown" id="mgmt-orgMenu"></div>
+    </div>
+    <div class="ms-wrap" id="mgmt-statusWrap">
+      <button class="ms-trigger" id="mgmt-statusTrigger" data-all-label="All Statuses" onclick="msToggle('mgmt-statusMenu', this)">All Statuses</button>
+      <div class="ms-dropdown" id="mgmt-statusMenu">
+        <label class="ms-option"><input type="checkbox" value="PROCESSING" onchange="mgmtRenderTable()"> Processing</label>
+        <label class="ms-option"><input type="checkbox" value="RECEIVED" onchange="mgmtRenderTable()"> Received in WH</label>
+        <label class="ms-option"><input type="checkbox" value="COMPLETED" onchange="mgmtRenderTable()"> Completed</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <div class="table-toolbar-left">Orders <span class="count-badge" id="mgmt-rowCount">0</span></div>
+      <div class="table-toolbar-right" id="mgmt-lastRefresh"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th onclick="mgmtSortBy('order_id')">Order ID</th>
+          <th onclick="mgmtSortBy('submitter')">Submitter</th>
+          <th onclick="mgmtSortBy('created_date')">Created Date</th>
+          <th onclick="mgmtSortBy('org')">Organization</th>
+          <th onclick="mgmtSortBy('warehouse')">Warehouse</th>
+          <th onclick="mgmtSortBy('appStatus')">Status</th>
+          <th onclick="mgmtSortBy('customer_po')">Customer PO</th>
+          <th>Comments</th>
+          <th>Action</th>
+        </tr></thead>
+        <tbody id="mgmt-tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="mgmt-emptyState">
+      <span class="empty-icon">🏢</span>
+      <div class="empty-title">No MGMT orders to display</div>
+      Click Refresh from MGMT to load orders
+    </div>
+  </div>
+</div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -685,11 +762,21 @@ async function sheetsLoadAll() {
         }
       });
     }
+    // Merge mgmt state
+    if (json.mgmt) {
+      Object.entries(json.mgmt).forEach(([id, s]) => {
+        if (mgmtOrders[id]) {
+          if (s.app_status) mgmtOrders[id].appStatus = s.app_status;
+          if (s.received_at) mgmtOrders[id].receivedAt = s.received_at;
+          if (s.comment)  allComments[id] = s.comment;
+        }
+      });
+    }
 
     sheetsReady = true;
     setSyncStatus('ok', 'Synced');
-    invSaveState(); csSaveState(); commentsSave();
-    invRenderAll(); csRenderAll();
+    invSaveState(); csSaveState(); mgmtSaveState(); commentsSave();
+    invRenderAll(); csRenderAll(); mgmtRenderAll();
   } catch(err) {
     setSyncStatus('error', 'Sheets error — using local');
     console.error('Sheets load error:', err);
@@ -830,6 +917,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Wire up static dropdowns (status menus); dynamic ones are wired after population
   wireMsCheckboxes(document.getElementById('inv-statusMenu'));
   wireMsCheckboxes(document.getElementById('cs-statusMenu'));
+  wireMsCheckboxes(document.getElementById('mgmt-statusMenu'));
   // Wire static inv warehouse menu
   wireMsCheckboxes(document.getElementById('inv-warehouseMenu'));
 });
@@ -855,6 +943,7 @@ function updateTabCounts() {
   document.getElementById('tabCount-inv').textContent = Object.keys(invOrders).length;
   const csPOs = new Set(Object.values(csOrders).map(o=>o.purchase_order_number||o.shipment_notice_package_item_id));
   document.getElementById('tabCount-cs').textContent = csPOs.size;
+  document.getElementById('tabCount-mgmt').textContent = Object.keys(mgmtOrders).length;
 }
 
 // ─── INVENTORY ORDERS ────────────────────────────────────────────────────────
@@ -1338,11 +1427,209 @@ function csRenderTable() {
   }).join('');
 }
 
+// ─── INVENTORY ORDERS - MGMT ──────────────────────────────────────────────────
+const MGMT_SHEET = 'MGMTOrders';
+
+// Seed data scraped from MGMT (Processing, non-SLC) — refreshed via bulkWrite on load
+const MGMT_SEED = [["ORD-260325-58965652","One-off Order by Noor Fishan","Mar 25, 2026 10:57 PM","Benifex","Warehouse - Manila","Processing",""],["ORD-260325-490C6E38","One-off Order by Katie Prentice","Mar 25, 2026 10:24 PM","Discord","Warehouse - Sydney AUS","Processing",""],["ORD-260325-794E13F0","One-off Order by Katie Prentice","Mar 25, 2026 10:22 PM","Discord","Warehouse - Sydney AUS","Processing",""],["ORD-260325-7F276EFF","One-off Order by Katie Prentice","Mar 25, 2026 10:17 PM","Discord","Warehouse - Singapore","Processing",""],["ORD-260325-9B773CB5","One-off Order by Katie Prentice","Mar 25, 2026 10:06 PM","Discord","Warehouse - Singapore","Processing",""],["ORD-260325-719C8869","One-off Order by Katie Prentice","Mar 25, 2026 9:57 PM","Discord","Warehouse - Coventry UK","Processing",""],["ORD-260325-7120CC11","One-off Order by Sunidhi Kumari","Mar 25, 2026 8:11 PM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260325-C02E10B7","One-off Order by Sunidhi Kumari","Mar 25, 2026 8:11 PM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260325-812287A0","One-off Order by Sunidhi Kumari","Mar 25, 2026 7:14 PM","Kinsta","Warehouse - Montreal","Processing",""],["ORD-260325-5463A452","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:29 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260325-DCD50093","One-off Order by Noor Fishan","Mar 25, 2026 6:28 PM","Neo4j","Warehouse - Coventry UK","Processing",""],["ORD-260325-6D0ACA1D","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:28 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260325-E977C481","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:28 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260325-13574FFF","One-off Order by Noor Fishan","Mar 25, 2026 6:28 PM","Neo4j","Warehouse - Coventry UK","Processing",""],["ORD-260325-DD1A047D","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:27 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260325-E668E154","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:27 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260325-D7E78DE2","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:26 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260325-B95AA1EC","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:26 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260325-CFA57B4C","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:25 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-CCC698D8","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:24 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-7A3DF03A","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:24 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-B76E635A","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:24 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-50B8F7A9","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:23 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-D79FF2D1","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:23 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-B5924D1E","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:21 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-204EDA91","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:21 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-52D29F57","One-off Order by Noor Fishan","Mar 25, 2026 6:20 PM","Neo4j","Warehouse - Germany EU","Processing",""],["ORD-260325-9918C30D","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:20 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-706ACC21","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:20 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-9786ECDC","One-off Order by Noor Fishan","Mar 25, 2026 6:19 PM","Neo4j","Warehouse - Coventry UK","Processing",""],["ORD-260325-88965240","One-off Order by Noor Fishan","Mar 25, 2026 6:19 PM","Neo4j","Warehouse - Germany EU","Processing",""],["ORD-260325-88B4DA00","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:17 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-988C0B92","One-off Order by Noor Fishan","Mar 25, 2026 6:17 PM","Sovos","Warehouse - Coventry UK","Processing",""],["ORD-260325-68070C22","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:17 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-008EEF54","One-off Order by Noor Fishan","Mar 25, 2026 6:16 PM","Sovos","Warehouse - Coventry UK","Processing",""],["ORD-260325-E4A46250","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:16 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-5DA5B04D","One-off Order by Sunidhi Kumari","Mar 25, 2026 6:16 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260325-4A838E4C","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:56 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-76FBE137","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:56 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-79A5E114","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:56 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-EB8DD638","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:55 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-B933C555","One-off Order by Noor Fishan","Mar 25, 2026 5:55 PM","SeatGeek","Warehouse - Coventry UK","Processing",""],["ORD-260325-C6A990B4","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:55 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-F74124FF","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:54 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-61371DD5","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:54 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-D7727990","One-off Order by Tim Rey Landerfors","Mar 25, 2026 5:54 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260325-F0ADFA01","One-off Order by Sunidhi Kumari","Mar 25, 2026 5:46 PM","Typeform","Warehouse - Germany EU","Processing",""],["ORD-260325-A23F6453","One-off Order by Sunidhi Kumari","Mar 25, 2026 5:46 PM","Typeform","Warehouse - Coventry UK","Processing",""],["ORD-260324-569A8D18","One-off Order by Katie Prentice","Mar 25, 2026 1:55 AM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260324-5A4AE3D3","One-off Order by Drea Bosque","Mar 25, 2026 1:24 AM","AppDirect","Warehouse - Argentina","Processing",""],["ORD-260324-44481E2C","One-off Order by Katie Prentice","Mar 25, 2026 12:43 AM","MaryRuth's","Warehouse - Mexico","Processing",""],["ORD-260324-7906B6D4","One-off Order by Katie Prentice","Mar 24, 2026 11:21 PM","Discord","Warehouse - Bogota COL","Processing",""],["ORD-260324-020CAC35","One-off Order by Jason Marszalec","Mar 24, 2026 10:27 PM","Life360","Warehouse - Oshawa CAN","Processing",""],["ORD-260324-4F5DCB0F","One-off Order by Amy Smith","Mar 24, 2026 6:46 AM","Sovos","Warehouse - Brazil","Processing",""],["ORD-260324-D6873611","One-off Order by Amy Smith","Mar 24, 2026 6:45 AM","Sovos","Warehouse - Germany EU","Processing",""],["ORD-260324-21AFD062","One-off Order by Amy Smith","Mar 24, 2026 6:44 AM","Sovos","Warehouse - Germany EU","Processing",""],["ORD-260324-15B77B9D","One-off Order by Amy Smith","Mar 24, 2026 6:43 AM","Sovos","Warehouse - Brazil","Processing",""],["ORD-260324-A2082765","One-off Order by Amy Smith","Mar 24, 2026 6:42 AM","Sovos","Warehouse - Brazil","Processing",""],["ORD-260323-F35CD8A7","One-off Order by Drea Bosque","Mar 24, 2026 1:47 AM","Earnest Analytics","Warehouse - Germany EU","Processing",""],["ORD-260323-B6978F63","One-off Order by Amy Smith","Mar 24, 2026 12:14 AM","Mews","Warehouse - Coventry UK","Processing",""],["ORD-260323-01F7CF03","One-off Order by Jaspinder Singh","Mar 23, 2026 11:37 PM","AppDirect","Warehouse - Oshawa CAN","Processing",""],["ORD-260323-5ABD659B","One-off Order by Kelvin Song","Mar 23, 2026 9:41 PM","Anyscale","Warehouse - Coventry UK","Processing",""],["ORD-260323-3FD434D3","One-off Order by Kelvin Song","Mar 23, 2026 9:32 PM","Anyscale","Warehouse - Chennai","Processing",""],["ORD-260323-098ACB7E","One-off Order by Kelvin Song","Mar 23, 2026 9:32 PM","Anyscale","Warehouse - Chennai","Processing",""],["ORD-260323-227EC8F4","One-off Order by Ramu Jalakam","Mar 23, 2026 9:27 PM","Yext","Warehouse - Manila","Processing",""],["ORD-260322-69624D3C","One-off Order by Radwan Nasar","Mar 23, 2026 2:53 AM","Carta","Warehouse - Germany EU","Processing",""],["ORD-260320-3175526A","One-off Order by Sheela Rance","Mar 21, 2026 3:22 AM","Pacvue","Warehouse - Mexico","Processing",""],["ORD-260320-A54E8FEC","One-off Order by Sheela Rance","Mar 21, 2026 3:22 AM","Pacvue","Warehouse - Mexico","Processing",""],["ORD-260320-E0FC3D57","One-off Order by Drea Bosque","Mar 21, 2026 1:26 AM","Tanium","Warehouse - Singapore","Processing",""],["ORD-260320-95BD5116","One-off Order by Drea Bosque","Mar 21, 2026 1:01 AM","Tanium","Warehouse - Singapore","Processing",""],["ORD-260320-A2E12025","One-off Order by Drea Bosque","Mar 21, 2026 12:59 AM","Tanium","Warehouse - Germany EU","Processing",""],["ORD-260320-62CFAD99","One-off Order by Katie Prentice","Mar 20, 2026 11:18 PM","Horizon3.ai","Warehouse - Dubai UAE","Processing",""],["ORD-260320-952412F8","One-off Order by Chelsey Mohr","Mar 20, 2026 10:09 PM","Cority","Warehouse - Coventry UK","Processing",""],["ORD-260320-F25C1604","One-off Order by Chelsey Mohr","Mar 20, 2026 10:07 PM","Cority","Warehouse - Coventry UK","Processing",""],["ORD-260320-CA9D6ACF","One-off Order by Kunjan Patel","Mar 20, 2026 6:58 PM","Sophos","Warehouse - Brazil","Processing",""],["ORD-260320-49FA5160","One-off Order by Amy Smith","Mar 20, 2026 6:46 PM","Sovos","Warehouse - Coventry UK","Processing",""],["ORD-260319-641251E0","One-off Order by Katie Prentice","Mar 20, 2026 1:07 AM","Wrapbook","Warehouse - Oshawa CAN","Processing",""],["ORD-260319-1872CDCB","One-off Order by Katie Prentice","Mar 20, 2026 1:00 AM","SOCi","Warehouse - Oshawa CAN","Processing",""],["ORD-260319-0B4E3C5F","One-off Order by Brian McCoy","Mar 19, 2026 11:18 PM","MoonPay","Warehouse - Chennai","Processing",""],["ORD-260319-CBA74E1C","One-off Order by Katie Prentice","Mar 19, 2026 9:44 PM","MoonPay","Warehouse - Sydney AUS","Processing",""],["ORD-260319-C84673BC","One-off Order by Amy Smith","Mar 19, 2026 8:25 PM","Sovos","Warehouse - Germany EU","Processing",""],["ORD-260319-A01C2FAF","One-off Order by Amy Smith","Mar 19, 2026 8:25 PM","Sovos","Warehouse - Germany EU","Processing",""],["ORD-260319-621176E5","One-off Order by Amy Smith","Mar 19, 2026 8:24 PM","Sovos","Warehouse - Germany EU","Processing",""],["ORD-260319-469EE5F2","One-off Order by Drea Bosque","Mar 19, 2026 8:21 PM","Digital.ai","Warehouse - Germany EU","Processing",""],["ORD-260319-5FBC5665","One-off Order by Brian McCoy","Mar 19, 2026 8:09 PM","MoonPay","Warehouse - Chennai","Processing",""],["ORD-260319-3E9B57F1","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:22 PM","Wise","Warehouse - Sydney AUS","Processing",""],["ORD-260319-731DE05F","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:20 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260319-301B6373","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:19 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-3982F9C8","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:19 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-F60C7AAD","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:18 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-7EFFAAD0","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:16 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-87A3A394","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:16 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-722E9891","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:16 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-0DC0577B","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:15 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-96D97EFC","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:15 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-9EDB5F78","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:14 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-EBDE02CF","One-off Order by Sunidhi Kumari","Mar 19, 2026 7:14 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260319-1DB79851","One-off Order by Arthur Wong","Mar 19, 2026 7:06 PM","Corelight","Warehouse - Coventry UK","Processing",""],["ORD-260319-5CA0FAD7","One-off Order by Amy Smith","Mar 19, 2026 6:47 PM","Strava","Warehouse - Germany EU","Processing",""],["ORD-260319-84FD2C43","One-off Order by Amy Smith","Mar 19, 2026 6:46 PM","Strava","Warehouse - Germany EU","Processing",""],["ORD-260319-49FB698B","One-off Order by Katie Prentice","Mar 19, 2026 6:40 PM","Tailscale","Warehouse - Coventry UK","Processing",""],["ORD-260319-D66B2BA5","One-off Order by Katie Prentice","Mar 19, 2026 6:38 PM","Tailscale","Warehouse - Oshawa CAN","Processing",""],["ORD-260319-7204D0A2","One-off Order by Amy Smith","Mar 19, 2026 6:33 PM","Strava","Warehouse - Coventry UK","Processing",""],["ORD-260319-7CD6564D","One-off Order by Amy Smith","Mar 19, 2026 6:32 PM","Strava","Warehouse - Coventry UK","Processing",""],["ORD-260319-FC1CCC53","One-off Order by Amy Smith","Mar 19, 2026 6:30 PM","Strava","Warehouse - Coventry UK","Processing",""],["ORD-260319-79004707","One-off Order by Drea Bosque","Mar 19, 2026 6:13 PM","OneTrust","Warehouse - Chennai","Processing",""],["ORD-260319-2A397C74","One-off Order by Drea Bosque","Mar 19, 2026 6:12 PM","OneTrust","Warehouse - Chennai","Processing",""],["ORD-260319-26CCAAC5","One-off Order by Dario Nicolini","Mar 19, 2026 6:08 PM","Sysdig","Warehouse - Germany EU","Processing",""],["ORD-260318-2EC79641","One-off Order by Katie Prentice","Mar 19, 2026 12:46 AM","Staffbase","Warehouse - Tokyo","Processing",""],["ORD-260318-6D088FCE","One-off Order by Alison Koenig","Mar 18, 2026 10:13 PM","Tanium","Warehouse - Manila","Processing",""],["ORD-260318-990B2863","One-off Order by Sunidhi Kumari","Mar 18, 2026 7:03 PM","Pacvue","Warehouse - Coventry UK","Processing",""],["ORD-260318-918E7368","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:51 PM","Typeform","Warehouse - Germany EU","Processing",""],["ORD-260318-519CAD37","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:48 PM","Postman","Warehouse - Singapore","Processing",""],["ORD-260318-7BD0A311","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:46 PM","Postman","Warehouse - Singapore","Processing",""],["ORD-260318-641786D8","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:43 PM","Postman","Warehouse - Singapore","Processing",""],["ORD-260318-A79790E1","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:41 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-1541228C","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:41 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-D383A607","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:41 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-D8B4D460","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:40 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-46871E6B","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:40 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-FDC7AF43","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:39 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-E6DDB130","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:39 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-D3C00055","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:38 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-06AAD6B2","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:38 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-03C4B696","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:37 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-DD5E7761","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:37 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-DEECB617","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:36 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-94471EB9","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:36 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-A874C0AA","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:35 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-B6E2212A","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:34 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260318-BDCB3067","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:33 PM","Postman","Warehouse - Oshawa CAN","Processing",""],["ORD-260318-8045017F","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:31 PM","Postman","Warehouse - Sydney AUS","Processing",""],["ORD-260318-2C52A2DE","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:29 PM","Postman","Warehouse - Coventry UK","Processing",""],["ORD-260318-E5F626F7","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:20 PM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260318-EAADFC53","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:19 PM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260318-2EB73D12","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:18 PM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260318-314FBD01","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:17 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260318-AFFFB22F","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:16 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260318-01022D62","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:16 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260318-452A0135","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:15 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260318-ADC83F7D","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:15 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260318-1B3723BC","One-off Order by Sunidhi Kumari","Mar 18, 2026 6:15 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260318-5742EB15","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:45 PM","Mercury","Warehouse - Oshawa CAN","Processing",""],["ORD-260318-B082CA62","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:44 PM","Mercury","Warehouse - Oshawa CAN","Processing",""],["ORD-260318-6B9EAA55","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:44 PM","Mercury","Warehouse - Oshawa CAN","Processing",""],["ORD-260318-F95E7F49","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:33 PM","Kinsta","Warehouse - Germany EU","Processing",""],["ORD-260318-C53EAC06","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:33 PM","Kinsta","Warehouse - Germany EU","Processing",""],["ORD-260318-8A00165F","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:32 PM","Kinsta","Warehouse - Coventry UK","Processing",""],["ORD-260318-A56401B0","One-off Order by Sunidhi Kumari","Mar 18, 2026 5:32 PM","Kinsta","Warehouse - Coventry UK","Processing",""],["ORD-260317-FEFF5FF5","One-off Order by Katie Prentice","Mar 18, 2026 1:38 AM","Prenuvo","Warehouse - Oshawa CAN","Processing",""],["ORD-260317-94F63518","One-off Order by Sung Jin Lee","Mar 18, 2026 12:53 AM","Cresta","Warehouse - Germany EU","Processing",""],["ORD-260317-D83FB521","One-off Order by Katie Prentice","Mar 18, 2026 12:36 AM","Velocity Global","Warehouse - Germany EU","Processing",""],["ORD-260317-ECE32B5B","One-off Order by Katie Prentice","Mar 17, 2026 8:09 PM","Rithum","Warehouse - Coventry UK","Processing",""],["ORD-260317-C146A54E","One-off Order by Eloiza Butay","Mar 17, 2026 3:04 PM","Cover Genius","Warehouse - Germany EU","Processing",""],["ORD-260317-442427B7","One-off Order by Drea Bosque","Mar 17, 2026 7:33 AM","Typeform","Warehouse - Germany EU","Processing",""],["ORD-260317-F42B001E","One-off Order by Drea Bosque","Mar 17, 2026 6:15 AM","Tanium","Warehouse - Germany EU","Processing",""],["ORD-260317-CD071089","One-off Order by Drea Bosque","Mar 17, 2026 6:14 AM","Tanium","Warehouse - Germany EU","Processing",""],["ORD-260317-860E3D2F","One-off Order by Drea Bosque","Mar 17, 2026 6:14 AM","Tanium","Warehouse - Germany EU","Processing",""],["ORD-260317-CD97E98D","One-off Order by Sung Jin Lee","Mar 17, 2026 5:46 AM","Cresta","Warehouse - Oshawa CAN","Processing",""],["ORD-260317-F13B5547","One-off Order by Sung Jin Lee","Mar 17, 2026 5:45 AM","Cresta","Warehouse - Oshawa CAN","Processing",""],["ORD-260317-C6537182","One-off Order by Sung Jin Lee","Mar 17, 2026 5:42 AM","Cresta","Warehouse - Germany EU","Processing",""],["ORD-260316-4750F719","One-off Order by Amy Smith","Mar 16, 2026 11:36 PM","SentinelOne","Warehouse - Chennai","Processing",""],["ORD-260316-AB2C1B75","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:43 PM","Ramp","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-2BC07561","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:43 PM","Ramp","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-AF85C61C","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:42 PM","Ramp","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-0C117202","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:41 PM","Ramp","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-F5C64A1A","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:41 PM","Ramp","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-7A78ABCC","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:18 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260316-1FCEDC53","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:15 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-A02BFD87","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:14 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-2684B8CB","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:14 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-6232A845","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:13 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-FBB9EC15","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:13 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-FE50C3AA","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:13 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-D7337718","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:12 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260316-26054942","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:11 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260316-C726EE9B","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:09 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260316-01036555","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:09 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260316-9034013E","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:08 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260316-17734D2B","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:08 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260316-802DBFAC","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:06 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260316-C340B056","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:05 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260316-827E9923","One-off Order by Sunidhi Kumari","Mar 16, 2026 7:04 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260316-38A4E11D","One-off Order by Sunidhi Kumari","Mar 16, 2026 6:51 PM","Pax8","Warehouse - Singapore","Processing",""],["ORD-260316-7DDFF748","One-off Order by Sunidhi Kumari","Mar 16, 2026 6:47 PM","Momentus","Warehouse - Sydney AUS","Processing",""],["ORD-260316-73B5BC27","One-off Order by Sunidhi Kumari","Mar 16, 2026 6:41 PM","StackAdapt","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-2EE7C8BA","One-off Order by Sunidhi Kumari","Mar 16, 2026 6:41 PM","StackAdapt","Warehouse - Coventry UK","Processing",""],["ORD-260316-64AEDD9B","One-off Order by Sunidhi Kumari","Mar 16, 2026 6:37 PM","Mercury","Warehouse - Oshawa CAN","Processing",""],["ORD-260316-56E24EBA","One-off Order by Luv Sharma ADM","Mar 16, 2026 10:56 AM","SentinelOne","Warehouse - Israel","Processing",""],["ORD-260313-756B37FA","One-off Order by Sung Jin Lee","Mar 13, 2026 10:51 PM","Cresta","Warehouse - Singapore","Processing",""],["ORD-260313-4AEC2335","One-off Order by Alison Koenig","Mar 13, 2026 10:07 PM","Tanium","Warehouse - Tokyo","Processing",""],["ORD-260313-C12A2F38","One-off Order by Alison Koenig","Mar 13, 2026 10:07 PM","Tanium","Warehouse - Tokyo","Processing",""],["ORD-260313-5D530800","One-off Order by Katie Prentice","Mar 13, 2026 9:59 PM","MoonPay","Warehouse - Oshawa CAN","Processing",""],["ORD-260313-08CFDFBC","One-off Order by Katie Prentice","Mar 13, 2026 9:53 PM","MoonPay","Warehouse - Oshawa CAN","Processing",""],["ORD-260313-9BEB2A7E","One-off Order by Katie Prentice","Mar 13, 2026 9:49 PM","MoonPay","Warehouse - Chennai","Processing",""],["ORD-260313-B95EDBFC","One-off Order by Drea Bosque","Mar 13, 2026 7:58 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260313-38702E7E","One-off Order by Drea Bosque","Mar 13, 2026 7:57 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260312-F4B96B61","One-off Order by Katie Prentice","Mar 13, 2026 4:49 AM","Horizon3.ai","Warehouse - Germany EU","Processing",""],["ORD-260312-CAD311AA","One-off Order by Katie Prentice","Mar 13, 2026 12:54 AM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260312-0FE46FB1","One-off Order by Katie Prentice","Mar 13, 2026 12:49 AM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260312-38D64CFF","One-off Order by Sohaib Gulzar","Mar 12, 2026 7:32 PM","SentinelOne","Warehouse - Germany EU","Processing",""],["ORD-260312-5DB8F9BE","One-off Order by Sohaib Gulzar","Mar 12, 2026 6:56 PM","SentinelOne","Warehouse - Germany EU","Processing",""],["ORD-260312-0B2CC6EB","One-off Order by Sohaib Gulzar","Mar 12, 2026 6:13 PM","SentinelOne","Warehouse - Germany EU","Processing",""],["ORD-260312-E03BBD12","One-off Order by Ain Salimon","Mar 12, 2026 2:42 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-E8EB8BBB","One-off Order by Ain Salimon","Mar 12, 2026 2:42 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-3AA46B64","One-off Order by Ain Salimon","Mar 12, 2026 2:41 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-54131C01","One-off Order by Ain Salimon","Mar 12, 2026 2:41 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-0C38A195","One-off Order by Ain Salimon","Mar 12, 2026 2:41 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-C0117067","One-off Order by Ain Salimon","Mar 12, 2026 2:40 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-F1D89A55","One-off Order by Ain Salimon","Mar 12, 2026 2:39 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-25E08422","One-off Order by Ain Salimon","Mar 12, 2026 2:38 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-F258479B","One-off Order by Ain Salimon","Mar 12, 2026 2:37 PM","Cloudflare","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260312-5B9A7BDA","One-off Order by Andrew Murphy","Mar 12, 2026 8:04 AM","Pax8","Warehouse - Manila","Processing",""],["ORD-260311-1534BDFE","One-off Order by Joanna Nakonieczna","Mar 12, 2026 12:41 AM","AppDirect","Warehouse - Oshawa CAN","Processing",""],["ORD-260311-39067B14","One-off Order by Katie Prentice","Mar 12, 2026 12:15 AM","Carta","Warehouse - Sydney AUS","Processing",""],["ORD-260311-D749F5A7","One-off Order by Amisha Mehta","Mar 11, 2026 8:36 PM","Brightwheel","Warehouse - Manila","Processing",""],["ORD-260311-937C8B9C","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:35 PM","Ramp","Warehouse - Germany EU","Processing",""],["ORD-260311-321A3292","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:35 PM","Ramp","Warehouse - Germany EU","Processing",""],["ORD-260311-554563C6","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:33 PM","Ramp","Warehouse - Germany EU","Processing",""],["ORD-260311-37E413FB","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:33 PM","Ramp","Warehouse - Germany EU","Processing",""],["ORD-260311-C996A5FE","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:32 PM","Ramp","Warehouse - Germany EU","Processing",""],["ORD-260311-47FE679B","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:29 PM","Ramp","Warehouse - Coventry UK","Processing",""],["ORD-260311-D661EB1C","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:29 PM","Ramp","Warehouse - Coventry UK","Processing",""],["ORD-260311-2C9E6E85","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:28 PM","Ramp","Warehouse - Coventry UK","Processing",""],["ORD-260311-D2502045","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:27 PM","Ramp","Warehouse - Coventry UK","Processing",""],["ORD-260311-A42D16E4","One-off Order by Amy Smith","Mar 11, 2026 7:12 PM","Sovos","Warehouse - Chennai","Processing",""],["ORD-260311-AB7E0DDD","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:08 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260311-D24F403F","One-off Order by Sunidhi Kumari","Mar 11, 2026 7:07 PM","Postman","Warehouse - Germany EU","Processing",""],["ORD-260311-18A718D7","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:45 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260311-74409ECB","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:44 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260311-623D6C10","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:44 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260311-ADFB90CA","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:41 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260311-6AFD55EB","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:41 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260311-AC5169CF","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:40 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260311-2C8D3724","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:40 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260311-E9B5E96F","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:40 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260311-73E5DD84","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:39 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260311-447E66F8","One-off Order by Sunidhi Kumari","Mar 11, 2026 6:36 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260310-AB7AC037","One-off Order by Katie Prentice","Mar 11, 2026 1:38 AM","MaryRuth's","Warehouse - Mexico","Processing",""],["ORD-260310-6987EDF4","One-off Order by Katie Prentice","Mar 10, 2026 11:26 PM","Horizon3.ai","Warehouse - Germany EU","Processing",""],["ORD-260310-E69C728E","One-off Order by Katie Prentice","Mar 10, 2026 11:21 PM","Horizon3.ai","Warehouse - Germany EU","Processing",""],["ORD-260309-C3940B2C","One-off Order by Alison Koenig","Mar 10, 2026 12:54 AM","Tanium","Warehouse - Manila","Processing",""],["ORD-260309-2B55729A","One-off Order by Amy Smith","Mar 9, 2026 10:02 PM","Benifex","Warehouse - Manila","Processing",""],["ORD-260309-67587328","One-off Order by Sunidhi Kumari","Mar 9, 2026 6:04 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260309-F6D345A3","One-off Order by Sunidhi Kumari","Mar 9, 2026 6:03 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260309-A6186139","One-off Order by Sunidhi Kumari","Mar 9, 2026 5:49 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260309-D83C0D8C","One-off Order by Sunidhi Kumari","Mar 9, 2026 5:29 PM","Stack Overflow","Warehouse - Germany EU","Processing",""],["ORD-260306-05E0064F","One-off Order by Alison Koenig","Mar 7, 2026 4:45 AM","Tanium","Warehouse - Singapore","Processing",""],["ORD-260306-A822D1CD","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:59 PM","AppDirect","Warehouse - Germany EU","Processing",""],["ORD-260306-44E043B7","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:59 PM","AppDirect","Warehouse - Germany EU","Processing",""],["ORD-260306-F649F032","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:52 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260306-8BA85B32","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:50 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260306-36DB5C01","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:46 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260306-D5763751","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:45 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260306-3FD38D88","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:45 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260306-1251893E","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:44 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260306-9B993888","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:43 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260306-E38B89B3","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:43 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260306-BDC0A00E","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:42 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260306-E278627F","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:42 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260306-F5711556","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:41 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260306-3677F83C","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:40 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260306-01019EE9","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:40 PM","Wise","Warehouse - Chennai","Processing",""],["ORD-260306-3E656C9A","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:38 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260306-6E87F7B6","One-off Order by Sunidhi Kumari","Mar 6, 2026 6:23 PM","Velocity Global","Warehouse - Chennai","Processing",""],["ORD-260305-3ED03D38","One-off Order by Drea Bosque","Mar 5, 2026 10:47 PM","Wise","Warehouse - Singapore","Processing",""],["ORD-260305-4E1D8D86","One-off Order","Mar 5, 2026 6:41 PM","Typeform","Warehouse - Germany EU","Processing",""],["ORD-260304-EA5815DD","One-off Order by Jhon Molina","Mar 5, 2026 12:55 AM","Ramp","Warehouse - Argentina","Processing",""],["ORD-260303-7A0694D3","One-off Order by Sunidhi Kumari","Mar 3, 2026 6:51 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260303-8C151CD3","One-off Order by Sunidhi Kumari","Mar 3, 2026 6:50 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260303-FB769AE7","One-off Order by Sunidhi Kumari","Mar 3, 2026 6:49 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260303-A6F88C3A","One-off Order by Sunidhi Kumari","Mar 3, 2026 6:47 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260302-4C3CCC8B","One-off Order by Katie Prentice","Mar 3, 2026 2:28 AM","Carta","Warehouse - Coventry UK","Processing",""],["ORD-260302-77C8E7E1","One-off Order by Amy Smith","Mar 2, 2026 10:22 PM","Docebo","Warehouse - Germany EU","Processing",""],["ORD-260302-3C527EAE","One-off Order by Drea Bosque","Mar 2, 2026 9:07 PM","DotDigital","Warehouse - Manila","Processing",""],["ORD-260302-2564A880","One-off Order by Sunidhi Kumari","Mar 2, 2026 7:17 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260302-230C7FBE","One-off Order by Sunidhi Kumari","Mar 2, 2026 7:16 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260302-92F028A9","One-off Order by Sunidhi Kumari","Mar 2, 2026 7:16 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260302-2CE1DA0E","One-off Order by Sunidhi Kumari","Mar 2, 2026 7:15 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260302-5FF1C64B","One-off Order by Sunidhi Kumari","Mar 2, 2026 7:15 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260302-CBE33096","One-off Order by Sunidhi Kumari","Mar 2, 2026 7:13 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260227-6A82C7D7","One-off Order by Noor Fishan","Feb 27, 2026 4:38 PM","Docebo","Warehouse - Oshawa CAN","Processing",""],["ORD-260226-DD3FCC6A","One-off Order by Amy Smith","Feb 27, 2026 2:41 AM","Prometheus.co","Warehouse - Chennai","Processing",""],["ORD-260226-F5FB4C85","One-off Order by Amy Smith","Feb 26, 2026 7:40 PM","Neo4j","Warehouse - Germany EU","Processing",""],["ORD-260226-69BD4401","One-off Order by Paige Luetkemeyer","Feb 26, 2026 7:30 PM","SOCi","Warehouse - Oshawa CAN","Processing",""],["ORD-260226-AE5EE34A","One-off Order by Leonardo Lemos","Feb 26, 2026 6:56 PM","Sterling","Warehouse - Bogota COL","Processing",""],["ORD-260226-88AE76E9","One-off Order by Amy Smith","Feb 26, 2026 6:14 PM","Benifex","Warehouse - Coventry UK","Processing",""],["ORD-260226-7D28D6B1","One-off Order by Attilio Monaco","Feb 26, 2026 6:12 PM","Sovos","Warehouse - Chennai","Processing",""],["ORD-260226-A8AA16F3","One-off Order by Vikas Mehra","Feb 26, 2026 3:34 PM","OneTrust","Warehouse - Chennai","Processing",""],["ORD-260226-23B5A4B3","One-off Order by Paige Luetkemeyer","Feb 26, 2026 5:39 AM","SOCi","Warehouse - Oshawa CAN","Processing",""],["ORD-260225-71B7740B","One-off Order by Keli Vel\u00e1zquez","Feb 25, 2026 11:08 PM","Tailscale","Warehouse - Oshawa CAN","Processing",""],["ORD-260225-173E2DB6","One-off Order by Sunidhi Kumari","Feb 25, 2026 6:29 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260225-DB9B949D","One-off Order by Sunidhi Kumari","Feb 25, 2026 6:28 PM","Wise","Warehouse - Coventry UK","Processing",""],["ORD-260225-8C10FC9D","One-off Order by Sunidhi Kumari","Feb 25, 2026 5:58 PM","Typeform","Warehouse - Coventry UK","Processing",""],["ORD-260225-2A6801BB","One-off Order by Sunidhi Kumari","Feb 25, 2026 5:34 PM","StackAdapt","Warehouse - Oshawa CAN","Processing",""],["ORD-260225-B719A037","One-off Order by Sunidhi Kumari","Feb 25, 2026 5:17 PM","LastPass","Warehouse - Germany EU","Processing",""],["ORD-260223-C4BC8797","One-off Order by Sunidhi Kumari","Feb 23, 2026 6:33 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260223-E2829038","One-off Order by Sunidhi Kumari","Feb 23, 2026 6:32 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260223-4C3C38A4","One-off Order by Sunidhi Kumari","Feb 23, 2026 6:16 PM","Postman","Warehouse - Coventry UK","Processing",""],["ORD-260220-009B2989","One-off Order by Katie Prentice","Feb 21, 2026 12:40 AM","Postman","Warehouse - Coventry UK","Processing",""],["ORD-260220-6AED71F9","One-off Order by Sunidhi Kumari","Feb 20, 2026 6:43 PM","Velocity Global","Warehouse - Chennai","Processing",""],["ORD-260220-12A326B3","One-off Order by Sunidhi Kumari","Feb 20, 2026 6:34 PM","Kraken Robotics","Warehouse - Germany EU","Processing",""],["ORD-260220-7BA11AE0","One-off Order by Sunidhi Kumari","Feb 20, 2026 6:17 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260220-514629B0","One-off Order by Sunidhi Kumari","Feb 20, 2026 6:16 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260220-9E57628E","One-off Order by Sunidhi Kumari","Feb 20, 2026 6:16 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260220-835EA7D9","One-off Order by Noor Fishan","Feb 20, 2026 5:42 PM","Sovos","Warehouse - Germany EU","Processing",""],["ORD-260220-75244406","One-off Order by Ain Salimon","Feb 20, 2026 9:39 AM","Cloudflare","Warehouse - Chennai","Processing",""],["ORD-260218-E2D2ADC5","One-off Order by Sunidhi Kumari","Feb 18, 2026 6:07 PM","Postman","Warehouse - Coventry UK","Processing",""],["ORD-260217-E3835D66","One-off Order by Drea Bosque","Feb 17, 2026 9:56 PM","Tanium","Warehouse - Manila","Processing",""],["ORD-260212-F6EB6E1E","One-off Order by Katie Prentice","Feb 13, 2026 1:28 AM","York Solutions","Warehouse - Chennai","Processing",""],["ORD-260211-6F5C8FF1","One-off Order by Sunidhi Kumari","Feb 11, 2026 6:53 PM","Harmonic Security","Warehouse - Coventry UK","Processing",""],["ORD-260211-92AFF2A2","One-off Order by Sunidhi Kumari","Feb 11, 2026 6:05 PM","Carta","Warehouse - Oshawa CAN","Processing",""],["ORD-260211-BB525B07","One-off Order by Ain Salimon","Feb 11, 2026 5:55 PM","Cloudflare","Warehouse - Tokyo","Processing",""],["ORD-260211-C11EB26B","One-off Order by Ain Salimon","Feb 11, 2026 5:55 PM","Cloudflare","Warehouse - Tokyo","Processing",""],["ORD-260211-EF682999","One-off Order by Ain Salimon","Feb 11, 2026 5:44 PM","Cloudflare","Warehouse - Tokyo","Processing",""],["ORD-260211-221B2952","One-off Order by Ain Salimon","Feb 11, 2026 5:43 PM","Cloudflare","Warehouse - Tokyo","Processing",""],["ORD-260211-B1F2BDE3","One-off Order by Khai Rohani","Feb 11, 2026 8:02 AM","Wise","Warehouse - Singapore","Processing",""],["ORD-260211-D6B50B99","One-off Order by Khai Rohani","Feb 11, 2026 7:07 AM","Wise","Warehouse - Singapore","Processing",""],["ORD-260210-15EB5E48","One-off Order by Bella Maduro","Feb 10, 2026 11:49 PM","Carta","Warehouse - Dubai UAE","Processing",""],["ORD-260210-21BA3F25","One-off Order by Ramon Smart","Feb 10, 2026 2:21 PM","Wiz","Warehouse - Tokyo","Processing",""],["ORD-260210-99459824","One-off Order by Ain Salimon","Feb 10, 2026 6:39 AM","Cloudflare","Warehouse - Sydney AUS","Processing",""],["ORD-260210-0A869652","One-off Order by Ain Salimon","Feb 10, 2026 6:30 AM","Cloudflare","Warehouse - Sydney AUS","Processing",""],["ORD-260210-2A79A123","One-off Order by Ain Salimon","Feb 10, 2026 6:30 AM","Cloudflare","Warehouse - Sydney AUS","Processing",""],["ORD-260209-1CE7E3F4","One-off Order by Sunidhi Kumari","Feb 9, 2026 7:15 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260209-AF1034D4","One-off Order by Sunidhi Kumari","Feb 9, 2026 7:09 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260209-4749EBB9","One-off Order by Sunidhi Kumari","Feb 9, 2026 7:08 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260209-FF200F58","One-off Order by Sunidhi Kumari","Feb 9, 2026 7:07 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260209-046B49F0","One-off Order by Sunidhi Kumari","Feb 9, 2026 7:07 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260209-777BBF67","One-off Order by Sunidhi Kumari","Feb 9, 2026 7:06 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260209-772D9CAD","One-off Order by Tim Rey Landerfors","Feb 9, 2026 1:35 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260209-058C0583","One-off Order by Tim Rey Landerfors","Feb 9, 2026 1:34 PM","Benifex","Warehouse - Germany EU","Processing",""],["ORD-260206-5546BFAC","One-off Order by Alison Grant","Feb 6, 2026 11:30 PM","MaryRuth's","Warehouse - Mexico","Processing",""],["ORD-260206-8C461BEF","One-off Order by Sunidhi Kumari","Feb 6, 2026 7:43 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260206-578AF426","One-off Order by Sunidhi Kumari","Feb 6, 2026 7:42 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260206-75BCA637","One-off Order by Sunidhi Kumari","Feb 6, 2026 7:41 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260206-BF5AF20E","One-off Order by Sunidhi Kumari","Feb 6, 2026 7:41 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260206-9BAD062C","One-off Order by Sunidhi Kumari","Feb 6, 2026 6:43 PM","Velocity Global","Warehouse - Chennai","Processing",""],["ORD-260205-F7C07718","One-off Order by Katie Prentice","Feb 6, 2026 12:02 AM","Discord","Warehouse - Tokyo","Processing",""],["ORD-260204-8F655AEA","One-off Order by Amy Smith","Feb 4, 2026 9:56 PM","Strava","Warehouse - Coventry UK","Processing",""],["ORD-260204-07750D17","One-off Order by Ramon Smart","Feb 4, 2026 8:09 PM","Wiz","Warehouse - Tokyo","Processing",""],["ORD-260202-404E8FB2","One-off Order by Sunidhi Kumari","Feb 2, 2026 6:25 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260202-B1D50DEA","One-off Order by Sunidhi Kumari","Feb 2, 2026 6:24 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260202-9C2F0788","One-off Order by Sunidhi Kumari","Feb 2, 2026 6:23 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260202-9830BA64","One-off Order by Sunidhi Kumari","Feb 2, 2026 6:23 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260202-57066314","One-off Order by Sunidhi Kumari","Feb 2, 2026 6:22 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260130-57A20866","One-off Order by Sunidhi Kumari","Jan 30, 2026 5:45 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260130-C751045C","One-off Order by Sunidhi Kumari","Jan 30, 2026 5:44 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260130-1DBEF1AA","One-off Order by Sunidhi Kumari","Jan 30, 2026 5:44 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260130-6DC94A1C","One-off Order by Sunidhi Kumari","Jan 30, 2026 5:43 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260130-4BA2C793","One-off Order by Sunidhi Kumari","Jan 30, 2026 5:42 PM","Wise","Warehouse - Kuala Lumpur MYS","Processing",""],["ORD-260130-59A45910","One-off Order by Sunidhi Kumari","Jan 30, 2026 5:20 PM","Abnormal.AI","Warehouse - Germany EU","Processing",""],["ORD-260128-D16EA513","One-off Order by Sunidhi Kumari","Jan 28, 2026 6:59 PM","OneTrust","Warehouse - Chennai","Processing",""],["ORD-260127-72E14B39","One-off Order by Katie Prentice","Jan 27, 2026 10:45 PM","Rithum","Warehouse - Germany EU","Processing",""],["ORD-260123-991ED8A6","One-off Order by Amy Smith","Jan 23, 2026 8:58 PM","Docebo","Warehouse - Oshawa CAN","Processing",""],["ORD-260121-875693BC","One-off Order by Katie Prentice","Jan 21, 2026 9:41 PM","Discord","Warehouse - Manila","Processing",""],["ORD-260121-D9C214AD","One-off Order by Sunidhi Kumari","Jan 21, 2026 7:02 PM","Velocity Global","Warehouse - Chennai","Processing",""],["ORD-260120-06D7C5E5","One-off Order by Sheela Rance","Jan 21, 2026 1:12 AM","Pacvue","Warehouse - Manila","Processing",""],["ORD-260119-A02DF81F","One-off Order by Sunidhi Kumari","Jan 19, 2026 6:43 PM","Wise","Warehouse - Tokyo","Processing",""],["ORD-260116-61BB34C8","One-off Order by Sunidhi Kumari","Jan 16, 2026 5:48 PM","OneTrust","Warehouse - Chennai","Processing",""],["ORD-260109-17521A28","One-off Order by Matthew Kennedy","Jan 9, 2026 6:24 PM","Ramp","Warehouse - Bogota COL","Processing",""],["ORD-260107-1E9DE3CC","One-off Order by Amy Smith","Jan 7, 2026 5:39 PM","Cloudflare","Warehouse - Chennai","Processing",""],["ORD-260105-E8326EAF","One-off Order by Amy Smith","Jan 5, 2026 8:01 PM","Cloudflare","Warehouse - Chennai","Processing",""],["ORD-260102-BA6010BB","One-off Order by Amy Smith","Jan 2, 2026 8:20 PM","Cloudflare","Warehouse - Chennai","Processing",""],["ORD-251223-C96AD58F","One-off Order by Amy Smith","Dec 23, 2025 8:10 PM","SentinelOne","Warehouse - Israel","Processing",""],["ORD-251222-9D911F64","One-off Order by Sunidhi Kumari","Dec 22, 2025 6:33 PM","OneTrust","Warehouse - Chennai","Processing",""],["ORD-251218-C6047B46","One-off Order by Sheela Rance","Dec 19, 2025 1:03 AM","Pacvue","Warehouse - Manila","Processing",""],["ORD-251211-C1D4CA75","One-off Order by Amy Smith","Dec 11, 2025 10:05 PM","SentinelOne","Warehouse - Chennai","Processing",""],["ORD-240123-2FF54F24","One-off Order by Daniel Sheridan","Jan 23, 2024 10:40 PM","MoonPay","Warehouse - EU","Processing",""],["ORD-231206-4680696D","One-off Order","Dec 6, 2023 9:39 PM","Houzz","Warehouse - EU","Processing",""]];
+
+// mgmtOrders: keyed by order_id
+let mgmtOrders = {};
+let mgmtSortCol = 'created_date', mgmtSortDir = -1;
+
+function mgmtLoadState() {
+  try {
+    const s = localStorage.getItem('inbound_tracker_mgmt_v1');
+    if (s) mgmtOrders = JSON.parse(s).orders || {};
+  } catch(e) {}
+}
+function mgmtSaveState() {
+  try { localStorage.setItem('inbound_tracker_mgmt_v1', JSON.stringify({orders: mgmtOrders})); } catch(e) {}
+}
+function mgmtClearAll() {
+  if (!confirm('Clear all MGMT orders? This will remove all local state.')) return;
+  mgmtOrders = {}; mgmtSaveState(); mgmtRenderAll();
+  showToast('MGMT Orders cleared');
+}
+
+// Seed: load from MGMT_SEED on first open (when localStorage is empty)
+// Also bulkWrite seed to sheet so it persists for other users
+function mgmtSeedIfEmpty() {
+  if (Object.keys(mgmtOrders).length > 0) return;
+  const added = mgmtIngestRows(MGMT_SEED);
+  if (added > 0) {
+    // Push seed rows to sheet (works from file:// — no CORS block)
+    const rows = MGMT_SEED.filter(r => !(r[4]||'').includes('SLC')).map(r => [
+      r[0],r[1],r[2],r[3],r[4],r[5],r[6],'PROCESSING','','',''
+    ]);
+    if (APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes('YOUR_APPS_SCRIPT')) {
+      fetch(APPS_SCRIPT_URL, {
+        method:'POST',
+        body: JSON.stringify({sheet:'MGMTOrders', action:'bulkWrite', rows})
+      }).catch(()=>{});
+    }
+  }
+}
+
+// Ingest scraped rows: [order_id, submitter, created_date, org, warehouse, mgmt_status, customer_po]
+function mgmtIngestRows(rows) {
+  let added = 0;
+  rows.forEach(r => {
+    const id = r[0]; if (!id) return;
+    const warehouse = r[4] || '';
+    if (warehouse.includes('SLC')) return; // double-check filter
+    if (!mgmtOrders[id]) {
+      mgmtOrders[id] = {
+        order_id: r[0], submitter: r[1], created_date: r[2],
+        org: r[3], warehouse: r[4], mgmt_status: r[5], customer_po: r[6],
+        appStatus: 'PROCESSING', addedAt: new Date().toISOString()
+      };
+      added++;
+    }
+  });
+  mgmtSaveState();
+  return added;
+}
+
+// Refresh button: prompts user to go to MGMT, copy data via bookmarklet
+function mgmtRefresh() {
+  showToast('Open MGMT in your browser — I will re-scrape and bulkWrite to the sheet');
+}
+
+// Merge state from Sheets (app_status, received_at, comment)
+function mgmtMergeSheetState(sheetMap) {
+  Object.entries(sheetMap).forEach(([id, s]) => {
+    if (mgmtOrders[id]) {
+      if (s.app_status) mgmtOrders[id].appStatus = s.app_status;
+      if (s.received_at) mgmtOrders[id].receivedAt = s.received_at;
+      if (s.comment) allComments[id] = s.comment;
+    }
+  });
+  mgmtSaveState(); commentsSave();
+}
+
+function mgmtMarkReceived(id) {
+  if (!mgmtOrders[id]) return;
+  mgmtOrders[id].appStatus = 'RECEIVED';
+  mgmtOrders[id].receivedAt = new Date().toISOString();
+  mgmtSaveState(); mgmtRenderAll();
+  showToast('Marked as Received in WH');
+  sheetsPush(MGMT_SHEET, id, { app_status: 'RECEIVED', received_at: mgmtOrders[id].receivedAt, comment: allComments[id] || '' });
+}
+function mgmtMarkCompleted(id) {
+  if (!mgmtOrders[id]) return;
+  sheetsDelete(MGMT_SHEET, id);
+  delete mgmtOrders[id]; mgmtSaveState(); mgmtRenderAll();
+  showToast('Marked as Completed — order removed');
+}
+function mgmtUnreceive(id) {
+  if (!mgmtOrders[id]) return;
+  mgmtOrders[id].appStatus = 'PROCESSING';
+  delete mgmtOrders[id].receivedAt;
+  mgmtSaveState(); mgmtRenderAll();
+  showToast('Marked as unreceived');
+  sheetsPush(MGMT_SHEET, id, { app_status: 'PROCESSING', received_at: '', comment: allComments[id] || '' });
+}
+
+function mgmtUpdateFilters() {
+  const whs = [...new Set(Object.values(mgmtOrders).map(o => o.warehouse).filter(Boolean))].sort();
+  msPopulateDynamic('mgmt-warehouseMenu', 'mgmt-warehouseTrigger', whs, 'All Warehouses');
+  const orgs = [...new Set(Object.values(mgmtOrders).map(o => o.org).filter(Boolean))].sort();
+  msPopulateDynamic('mgmt-orgMenu', 'mgmt-orgTrigger', orgs, 'All Orgs');
+}
+
+function mgmtGetFiltered() {
+  const search = document.getElementById('mgmt-search').value.toLowerCase();
+  const whs = [...document.querySelectorAll('#mgmt-warehouseMenu input:checked')].map(c => c.value);
+  const orgs = [...document.querySelectorAll('#mgmt-orgMenu input:checked')].map(c => c.value);
+  const statuses = [...document.querySelectorAll('#mgmt-statusMenu input:checked')].map(c => c.value);
+  return Object.values(mgmtOrders).filter(o => {
+    if (whs.length && !whs.includes(o.warehouse)) return false;
+    if (orgs.length && !orgs.includes(o.org)) return false;
+    if (statuses.length && !statuses.includes(o.appStatus)) return false;
+    if (search) {
+      const hay = [o.order_id, o.org, o.warehouse, o.customer_po, o.submitter].join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+function mgmtSortBy(col) {
+  if (mgmtSortCol === col) mgmtSortDir *= -1; else { mgmtSortCol = col; mgmtSortDir = 1; }
+  mgmtRenderTable();
+}
+
+function mgmtRenderAll() { mgmtUpdateFilters(); mgmtRenderTable(); mgmtRenderStats(); updateTabCounts(); }
+
+function mgmtRenderStats() {
+  const all = Object.values(mgmtOrders); const total = all.length || 1;
+  const proc = all.filter(o => o.appStatus === 'PROCESSING').length;
+  const rec  = all.filter(o => o.appStatus === 'RECEIVED').length;
+  const comp = all.filter(o => o.appStatus === 'COMPLETED').length;
+  document.getElementById('mgmt-statTotal').textContent = all.length;
+  document.getElementById('mgmt-statProcessing').textContent = proc;
+  document.getElementById('mgmt-statReceived').textContent = rec;
+  document.getElementById('mgmt-statCompleted').textContent = comp;
+  document.getElementById('mgmt-barProcessing').style.width = (proc / total * 100) + '%';
+  document.getElementById('mgmt-barReceived').style.width = (rec / total * 100) + '%';
+  document.getElementById('mgmt-barCompleted').style.width = (comp / total * 100) + '%';
+}
+
+const MGMT_BADGE_LABELS = { 'PROCESSING': 'Processing', 'RECEIVED': 'Received in WH', 'COMPLETED': 'Completed' };
+
+function mgmtRenderTable() {
+  const rows = mgmtGetFiltered();
+  rows.sort((a, b) => {
+    let av = a[mgmtSortCol] || '', bv = b[mgmtSortCol] || '';
+    return av < bv ? -mgmtSortDir : av > bv ? mgmtSortDir : 0;
+  });
+  const tbody = document.getElementById('mgmt-tableBody');
+  const empty = document.getElementById('mgmt-emptyState');
+  document.getElementById('mgmt-rowCount').textContent = rows.length;
+  if (rows.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = rows.map(o => {
+    const id = o.order_id;
+    const eid = id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const isRec = o.appStatus === 'RECEIVED';
+    const mgmtUrl = `https://mgmt.firstbasehq.com/platform/inventory_orders/${id}`;
+    let btn = isRec
+      ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="mgmtUnreceive('${eid}')">↩ Unreceive</button><button class="btn-complete" onclick="mgmtMarkCompleted('${eid}')">Mark Completed</button></div>`
+      : `<button class="btn-receive" onclick="mgmtMarkReceived('${eid}')">Mark Received</button>`;
+    const whShort = whLabel(o.warehouse || '');
+    const badge = o.appStatus || 'PROCESSING';
+    const lbl = MGMT_BADGE_LABELS[badge] || badge;
+    return `<tr class="${isRec ? 'received' : ''}">
+      <td class="id-cell"><a class="tracking-link" href="${mgmtUrl}" target="_blank">${id}</a></td>
+      <td style="font-size:12px;color:var(--text2)">${o.submitter || '—'}</td>
+      <td class="date-cell">${o.created_date || '—'}</td>
+      <td>${o.org || '—'}</td>
+      <td class="mono">${whShort}</td>
+      <td><span class="badge badge-${badge}">${lbl}</span></td>
+      <td class="mono">${o.customer_po || '—'}</td>
+      <td class="comment-cell">${commentInput(id)}</td>
+      <td>${btn}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Wire MGMT status filter checkboxes
+function mgmtOnChange(cb, allLabel) {
+  const menu = cb.closest('.ms-dropdown');
+  const trigger = menu.closest('.ms-wrap').querySelector('.ms-trigger');
+  cb.closest('.ms-option').classList.toggle('checked', cb.checked);
+  msUpdateLabel(menu, trigger, allLabel);
+  mgmtRenderTable();
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
-invLoadState(); csLoadState(); commentsLoad();
-invRenderAll(); csRenderAll();
-const invN=Object.keys(invOrders).length, csN=Object.keys(csOrders).length;
-if(invN>0||csN>0) document.getElementById('lastUpdated').textContent=`${invN} inventory + ${csN} customer supplied orders loaded from previous session`;
+invLoadState(); csLoadState(); mgmtLoadState(); commentsLoad();
+mgmtSeedIfEmpty();
+invRenderAll(); csRenderAll(); mgmtRenderAll();
+const invN = Object.keys(invOrders).length, csN = Object.keys(csOrders).length, mgmtN = Object.keys(mgmtOrders).length;
+if (invN > 0 || csN > 0 || mgmtN > 0)
+  document.getElementById('lastUpdated').textContent = `${invN} inventory + ${csN} customer supplied + ${mgmtN} MGMT orders loaded`;
 // Load Sheets state and merge on top of local
 sheetsLoadAll();
 </script>
