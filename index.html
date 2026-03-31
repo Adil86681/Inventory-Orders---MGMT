@@ -403,6 +403,68 @@
   }
   .sku-tooltip-wrap:hover .sku-tip { display: block; }
 
+  /* Product Search Tab */
+  .ps-hero {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+  }
+  .ps-search-row { display: flex; gap: 10px; align-items: center; }
+  .ps-search-wrap { flex: 1; position: relative; }
+  .ps-search-wrap input {
+    width: 100%; background: var(--surface2); border: 2px solid var(--border);
+    border-radius: 9px; padding: 13px 16px 13px 44px;
+    color: var(--text); font-family: var(--sans); font-size: 15px;
+    outline: none; transition: all 0.18s;
+  }
+  .ps-search-wrap input::placeholder { color: var(--muted); }
+  .ps-search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(61,111,255,0.12); background: var(--surface3); }
+  .ps-search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 17px; pointer-events: none; }
+  .ps-clear-btn {
+    padding: 13px 18px; border-radius: 9px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text2); transition: all 0.15s; white-space: nowrap;
+  }
+  .ps-clear-btn:hover { border-color: var(--red); color: var(--red); }
+  .ps-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; flex-wrap: wrap; gap: 8px; }
+  .ps-hint { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .ps-status { font-size: 12px; color: var(--accent2); font-family: var(--mono); }
+  .ps-cat-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .ps-cat-pill {
+    padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text2); transition: all 0.15s; white-space: nowrap; font-family: var(--mono);
+  }
+  .ps-cat-pill:hover { border-color: var(--accent); color: var(--accent2); }
+  .ps-cat-pill.active { background: rgba(61,111,255,0.15); border-color: rgba(61,111,255,0.4); color: var(--accent2); }
+  .ps-cat-pill.all-pill.active { background: rgba(61,111,255,0.15); border-color: rgba(61,111,255,0.4); color: var(--accent2); }
+
+  .ps-exact-match {
+    background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.3);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;
+    display: none;
+  }
+  .ps-exact-match.visible { display: block; }
+  .ps-exact-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--green); margin-bottom: 8px; }
+  .ps-exact-row { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .ps-exact-sku { font-family: var(--mono); font-size: 13px; color: var(--accent2); font-weight: 600; }
+  .ps-exact-desc { font-size: 13px; color: var(--text); flex: 1; line-height: 1.5; }
+  .ps-exact-cat { font-size: 11px; font-family: var(--mono); color: var(--muted); background: var(--surface3); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; white-space: nowrap; }
+
+  .ps-loading { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 13px; }
+  .ps-loading-spinner {
+    width: 32px; height: 32px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: ps-spin 0.7s linear infinite; margin: 0 auto 14px;
+  }
+  @keyframes ps-spin { to { transform: rotate(360deg); } }
+
+  td.ps-sku-cell { font-family: var(--mono); font-size: 11px; color: var(--accent2); white-space: nowrap; }
+  td.ps-desc-cell { font-size: 12px; line-height: 1.5; color: var(--text); }
+  td.ps-mpn-cell { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  td.ps-cat-cell { font-family: var(--mono); font-size: 11px; }
+  .ps-highlight { background: rgba(61,111,255,0.2); border-radius: 2px; color: var(--accent2); padding: 0 1px; }
+
   .comment-cell { min-width: 140px; max-width: 200px; }
   .comment-input {
     width: 100%; background: transparent; border: 1px solid transparent;
@@ -441,6 +503,9 @@
   </button>
   <button class="tab-btn" onclick="switchTab('mgmt')" id="tabBtn-mgmt">
     🏢 Inventory Orders - MGMT <span class="tab-count" id="tabCount-mgmt">0</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('search')" id="tabBtn-search">
+    🔍 Product Search <span class="tab-count" id="tabCount-search">0</span>
   </button>
 </div>
 
@@ -725,6 +790,85 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- ═══ PRODUCT SEARCH TAB ═══ -->
+<div class="tab-panel" id="panel-search">
+<div class="app">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Product Search</h1>
+      <p>SKU Catalog · 4 columns · Search by MPN, description, category, or SKU ID</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" onclick="psRefresh()">↺ Refresh Catalog</button>
+    </div>
+  </div>
+
+  <div class="ps-hero">
+    <div class="ps-search-row">
+      <div class="ps-search-wrap">
+        <span class="ps-search-icon">⌕</span>
+        <input type="text" id="ps-input"
+          placeholder="Search by MPN, description, category, or SKU ID…"
+          oninput="psOnInput()"
+          onkeydown="if(event.key==='Escape'){psClear()}"
+          autocomplete="off" spellcheck="false">
+      </div>
+      <button class="ps-clear-btn" onclick="psClear()">✕ Clear</button>
+    </div>
+    <div class="ps-meta">
+      <span class="ps-hint" id="ps-hint">Type to search — multi-word: all terms must match</span>
+      <span class="ps-status" id="ps-status"></span>
+    </div>
+    <div class="ps-cat-bar" id="ps-catBar">
+      <button class="ps-cat-pill all-pill active" onclick="psSetCat('', this)">All</button>
+    </div>
+  </div>
+
+  <div class="ps-exact-match" id="ps-exactMatch">
+    <div class="ps-exact-label">⚡ Exact MPN Match</div>
+    <div class="ps-exact-row">
+      <span class="ps-exact-sku" id="ps-exactSku"></span>
+      <span class="ps-exact-desc" id="ps-exactDesc"></span>
+      <span class="ps-exact-cat" id="ps-exactCat"></span>
+      <button class="btn-copy" id="ps-exactCopyBtn" onclick="psCopyExact(this)">⎘ Copy SKU</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <div class="table-toolbar-left">Results <span class="count-badge" id="ps-rowCount">—</span></div>
+      <div class="table-toolbar-right" id="ps-catalogSize"></div>
+    </div>
+    <div id="ps-loadingState" class="ps-loading" style="display:none">
+      <div class="ps-loading-spinner"></div>
+      Loading SKU catalog from Google Sheets…
+    </div>
+    <div class="table-scroll" id="ps-tableWrap" style="display:none">
+      <table>
+        <thead><tr>
+          <th onclick="psSort('sku_id')">SKU ID</th>
+          <th onclick="psSort('desc')">Description</th>
+          <th onclick="psSort('mpn')">MPN / Vendor SKU</th>
+          <th onclick="psSort('cat')">Category</th>
+          <th>Copy</th>
+        </tr></thead>
+        <tbody id="ps-tableBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="ps-emptyState" style="display:none">
+      <span class="empty-icon">🔍</span>
+      <div class="empty-title">No results</div>
+      Try a different search term
+    </div>
+    <div class="empty" id="ps-noLoadState">
+      <span class="empty-icon">📦</span>
+      <div class="empty-title">Catalog not loaded</div>
+      Click the tab to load — or press Refresh Catalog
+    </div>
+  </div>
+</div>
+</div>
 
 <script>
 // ─── GOOGLE SHEETS CONFIG ────────────────────────────────────────────────────
@@ -1718,6 +1862,206 @@ function mgmtRenderTable() {
       <td>${btn}</td>
     </tr>`;
   }).join('');
+}
+
+
+// ─── PRODUCT SEARCH ───────────────────────────────────────────────────────────
+let psCatalog     = [];      // [{sku_id, desc, mpn, cat}]
+let psCatalogLoaded = false;
+let psActiveCat   = '';
+let psSortCol     = 'desc';
+let psSortDir     = 1;
+let psSearchTimer = null;
+
+const SKU_CATALOG_CSV_URL = `https://docs.google.com/spreadsheets/d/${MGMT_SHEET_ID}/export?format=csv&gid=${SKU_CATALOG_GID}`;
+
+async function psLoadCatalog(force = false) {
+  if (psCatalogLoaded && !force) return;
+  const loading = document.getElementById('ps-loadingState');
+  const noLoad  = document.getElementById('ps-noLoadState');
+  const wrap    = document.getElementById('ps-tableWrap');
+  const empty   = document.getElementById('ps-emptyState');
+  loading.style.display = 'block';
+  noLoad.style.display  = 'none';
+  wrap.style.display    = 'none';
+  empty.style.display   = 'none';
+  document.getElementById('ps-status').textContent = 'Loading…';
+  try {
+    const res = await fetch(SKU_CATALOG_CSV_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const rows = parseCSV(text);
+    psCatalog = rows.map(r => ({
+      sku_id: (r['ITEM_Code'] || '').trim(),
+      desc:   (r['ITEM_DETAILED_DESCRIPTION'] || '').trim(),
+      mpn:    (r['MPN_VENDOR_SKU'] || '').trim(),
+      cat:    (r['CATEGORY'] || '').trim()
+    })).filter(r => r.sku_id || r.desc);
+    psCatalogLoaded = true;
+    // Build category pills
+    const cats = [...new Set(psCatalog.map(r => r.cat).filter(Boolean))].sort();
+    const bar  = document.getElementById('ps-catBar');
+    bar.innerHTML = `<button class="ps-cat-pill all-pill active" onclick="psSetCat('', this)">All</button>`;
+    cats.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'ps-cat-pill';
+      btn.textContent = c;
+      btn.onclick = () => psSetCat(c, btn);
+      bar.appendChild(btn);
+    });
+    document.getElementById('tabCount-search').textContent = psCatalog.length.toLocaleString();
+    document.getElementById('ps-catalogSize').textContent  = `${psCatalog.length.toLocaleString()} SKUs in catalog`;
+    document.getElementById('ps-status').textContent = `${psCatalog.length.toLocaleString()} SKUs loaded`;
+    loading.style.display = 'none';
+    wrap.style.display    = '';
+    psRender();
+  } catch(err) {
+    loading.style.display = 'none';
+    noLoad.style.display  = 'block';
+    document.getElementById('ps-status').textContent = 'Load failed — check sheet access';
+    console.error('psLoadCatalog error:', err);
+  }
+}
+
+function psSetCat(cat, btn) {
+  psActiveCat = cat;
+  document.querySelectorAll('.ps-cat-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  psRender();
+}
+
+function psOnInput() {
+  clearTimeout(psSearchTimer);
+  psSearchTimer = setTimeout(psRender, 120);
+}
+
+function psClear() {
+  document.getElementById('ps-input').value = '';
+  psRender();
+  document.getElementById('ps-input').focus();
+}
+
+function psSort(col) {
+  if (psSortCol === col) psSortDir *= -1; else { psSortCol = col; psSortDir = 1; }
+  psRender();
+}
+
+function psRefresh() {
+  psCatalogLoaded = false;
+  psLoadCatalog(true);
+}
+
+function psHighlight(text, tokens) {
+  if (!tokens.length) return escHtml(text);
+  let result = escHtml(text);
+  tokens.forEach(tok => {
+    const re = new RegExp(`(${tok.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+    result = result.replace(re, '<span class="ps-highlight">$1</span>');
+  });
+  return result;
+}
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function psRender() {
+  if (!psCatalogLoaded) return;
+  const raw    = document.getElementById('ps-input').value.trim();
+  const tokens = raw.toLowerCase().split(/\s+/).filter(Boolean);
+  const catFilter = psActiveCat;
+
+  // Filter
+  let results = psCatalog.filter(r => {
+    if (catFilter && r.cat !== catFilter) return false;
+    if (!tokens.length) return true;
+    const hay = (r.sku_id + ' ' + r.desc + ' ' + r.mpn + ' ' + r.cat).toLowerCase();
+    return tokens.every(t => hay.includes(t));
+  });
+
+  // Exact MPN match (case-insensitive)
+  const exactMatch = raw ? psCatalog.find(r => r.mpn.toLowerCase() === raw.toLowerCase()) : null;
+  const exactEl    = document.getElementById('ps-exactMatch');
+  if (exactMatch) {
+    document.getElementById('ps-exactSku').textContent  = exactMatch.sku_id;
+    document.getElementById('ps-exactDesc').textContent = exactMatch.desc;
+    document.getElementById('ps-exactCat').textContent  = exactMatch.cat;
+    document.getElementById('ps-exactCopyBtn').dataset.sku = exactMatch.sku_id;
+    exactEl.classList.add('visible');
+  } else {
+    exactEl.classList.remove('visible');
+  }
+
+  // Sort
+  results.sort((a, b) => {
+    const av = a[psSortCol] || '', bv = b[psSortCol] || '';
+    return av < bv ? -psSortDir : av > bv ? psSortDir : 0;
+  });
+
+  // Cap at 500 for performance
+  const total     = results.length;
+  const displayed = results.slice(0, 500);
+
+  document.getElementById('ps-rowCount').textContent =
+    total > 500 ? `${displayed.length} of ${total.toLocaleString()}` : total.toLocaleString();
+
+  const tbody = document.getElementById('ps-tableBody');
+  const empty  = document.getElementById('ps-emptyState');
+  const wrap   = document.getElementById('ps-tableWrap');
+
+  if (total === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    wrap.style.display  = 'none';
+    document.getElementById('ps-hint').textContent = tokens.length
+      ? `No matches for "${raw}"${catFilter ? ' in ' + catFilter : ''}`
+      : 'Type to search';
+    return;
+  }
+
+  empty.style.display = 'none';
+  wrap.style.display  = '';
+  document.getElementById('ps-hint').textContent = tokens.length
+    ? `Showing ${displayed.length}${total > 500 ? ' of ' + total.toLocaleString() : ''} result${total !== 1 ? 's' : ''} — type more to narrow down`
+    : `Showing all ${total.toLocaleString()} SKUs${catFilter ? ' in ' + catFilter : ''}`;
+
+  tbody.innerHTML = displayed.map(r => {
+    const esku = escHtml(r.sku_id);
+    return `<tr>
+      <td class="ps-sku-cell">${psHighlight(r.sku_id, tokens)}</td>
+      <td class="ps-desc-cell">${psHighlight(r.desc, tokens)}</td>
+      <td class="ps-mpn-cell">${psHighlight(r.mpn, tokens)}</td>
+      <td class="ps-cat-cell"><span class="badge" style="background:rgba(91,132,255,0.08);border:1px solid rgba(91,132,255,0.2);color:var(--accent2)">${psHighlight(r.cat, tokens)}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn-copy" onclick="psCopySku('${esku}', this)">⎘ SKU</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function psCopySku(sku, btn) {
+  navigator.clipboard.writeText(sku).then(() => {
+    btn.textContent = '✓ copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⎘ SKU'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
+function psCopyExact(btn) {
+  const sku = btn.dataset.sku || '';
+  if (!sku) return;
+  navigator.clipboard.writeText(sku).then(() => {
+    btn.textContent = '✓ copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⎘ Copy SKU'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
+// Load catalog when search tab is first clicked
+const _origSwitchTab = switchTab;
+function switchTab(tab) {
+  _origSwitchTab(tab);
+  if (tab === 'search' && !psCatalogLoaded) {
+    document.getElementById('ps-noLoadState').style.display = 'none';
+    psLoadCatalog();
+  }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
