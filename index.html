@@ -704,6 +704,7 @@
           <th onclick="mgmtSortBy('org')">Organization</th>
           <th onclick="mgmtSortBy('warehouse')">Warehouse</th>
           <th onclick="mgmtSortBy('product_title')">Product</th>
+          <th>Copy</th>
           <th onclick="mgmtSortBy('mpn')">MPN</th>
           <th onclick="mgmtSortBy('quantity')">Qty</th>
           <th onclick="mgmtSortBy('appStatus')">Status</th>
@@ -1568,6 +1569,23 @@ function mgmtUnreceive(id) {
   sheetsPush(MGMT_SHEET, id, { app_status: 'PROCESSING', received_at: '', comment: allComments[id] || '' });
 }
 
+function mgmtCopyId(id, btn) {
+  const o = mgmtOrders[id];
+  const sku = (o && o.sku_id) ? o.sku_id : id;
+  navigator.clipboard.writeText(sku).then(() => {
+    btn.textContent = '✓ copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⎘ SKU'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+function mgmtCopyIdProduct(id, product, btn) {
+  const o = mgmtOrders[id];
+  const sku = (o && o.sku_id) ? o.sku_id : id;
+  navigator.clipboard.writeText(sku + '\n' + product).then(() => {
+    btn.textContent = '✓ copied'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⎘ SKU+Product'; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
 // ── MGMT DROPDOWN FILTERS ────────────────────────────────────────────────────
 function mgmtPopulateDropdowns() {
   const whs  = [...new Set(Object.values(mgmtOrders).map(o => o.warehouse).filter(Boolean))].sort();
@@ -1683,12 +1701,15 @@ function mgmtRenderTable() {
     const prodCell = skuTip
       ? `<span class="sku-tooltip-wrap">${prodTitle}${skuTip}</span>`
       : prodTitle;
+    const emgmt = id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const eprodmgmt = (o.product_title || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
     return `<tr class="${isRec ? 'received' : ''}">
       <td class="id-cell"><a class="tracking-link" href="${mgmtUrl}" target="_blank">${id}</a></td>
       <td class="date-cell">${o.created_date || '—'}</td>
       <td>${o.org || '—'}</td>
       <td class="mono">${whShort}</td>
       <td class="product-cell">${prodCell}</td>
+      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="mgmtCopyId('${emgmt}',this)">⎘ SKU</button><button class="btn-copy" onclick="mgmtCopyIdProduct('${emgmt}','${eprodmgmt}',this)">⎘ SKU+Product</button></div></td>
       <td class="mono" style="font-size:11px">${o.mpn || '—'}</td>
       <td class="mono">${o.quantity || '—'}</td>
       <td><span class="badge badge-${badge}">${lbl}</span></td>
