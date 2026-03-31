@@ -1092,6 +1092,10 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('panel-'+tab).classList.add('active');
   document.getElementById('tabBtn-'+tab).classList.add('active');
+  if (tab === 'search' && !psCatalogLoaded) {
+    document.getElementById('ps-noLoadState').style.display = 'none';
+    psLoadCatalog();
+  }
 }
 function updateTabCounts() {
   document.getElementById('tabCount-inv').textContent = Object.keys(invOrders).length;
@@ -2052,16 +2056,6 @@ function psCopyExact(btn) {
     btn.textContent = '✓ copied'; btn.classList.add('copied');
     setTimeout(() => { btn.textContent = '⎘ Copy SKU'; btn.classList.remove('copied'); }, 1800);
   });
-}
-
-// Load catalog when search tab is first clicked
-const _origSwitchTab = switchTab;
-function switchTab(tab) {
-  _origSwitchTab(tab);
-  if (tab === 'search' && !psCatalogLoaded) {
-    document.getElementById('ps-noLoadState').style.display = 'none';
-    psLoadCatalog();
-  }
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
