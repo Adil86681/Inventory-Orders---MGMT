@@ -923,7 +923,9 @@ async function invFetchFromAPI() {
           pageSize: pageSize,
           sort: [{ field: 'createdAt', direction: 'DESC' }]
         },
-        filter: {}
+        filter: {
+          statuses: ['PENDING', 'ORDERED', 'SHIPPED', 'PARTIALLY_SHIPPED', 'ARRIVED_AT_PROCESSING_FACILITY', 'OUT_FOR_DELIVERY']
+        }
       };
 
       const res = await fetch(API_GRAPHQL_URL, {
