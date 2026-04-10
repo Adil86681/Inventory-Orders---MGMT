@@ -7,23 +7,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:       #1e2130;
-    --surface:  #252a3d;
-    --surface2: #2d3348;
-    --surface3: #353c54;
-    --border:   #3a4060;
-    --border2:  #4a526e;
-    --navy:     #1a2340;
+    --bg:       #f0f2f5;
+    --surface:  #ffffff;
+    --surface2: #f7f8fa;
+    --surface3: #eef0f4;
+    --border:   #d8dce6;
+    --border2:  #c4c9d6;
+    --navy:     #ffffff;
     --accent:   #3d6fff;
-    --accent2:  #5b84ff;
-    --green:    #34d399;
-    --green-dim:#10b981;
-    --amber:    #fbbf24;
-    --red:      #f87171;
-    --purple:   #a78bfa;
-    --text:     #e4e8f5;
-    --text2:    #8b95b5;
-    --muted:    #5a6380;
+    --accent2:  #2b5be0;
+    --green:    #16a34a;
+    --green-dim:#15803d;
+    --amber:    #d97706;
+    --red:      #dc2626;
+    --purple:   #7c3aed;
+    --text:     #1a1d2e;
+    --text2:    #4a5068;
+    --muted:    #7a8198;
     --mono:     'JetBrains Mono', monospace;
     --sans:     'Inter', sans-serif;
   }
@@ -31,14 +31,14 @@
   body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
   body::before {
     content: ''; position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none; z-index: 0; opacity: 0.4;
+    pointer-events: none; z-index: 0; opacity: 0;
   }
   .topbar {
     background: var(--navy); border-bottom: 1px solid var(--border);
     padding: 0 32px; height: 48px;
     display: flex; align-items: center; justify-content: space-between;
     position: relative; z-index: 2;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   .topbar-left { display: flex; align-items: center; gap: 24px; }
   .topbar-brand {
@@ -159,7 +159,7 @@
     display: none; position: fixed;
     background: var(--surface2); border: 1px solid var(--border2);
     border-radius: 10px; padding: 12px 14px; width: 250px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.6); z-index: 9999;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.12); z-index: 9999;
   }
   .retool-bubble::after {
     content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
@@ -232,7 +232,7 @@
     display: flex; flex-direction: column; gap: 6px;
     transition: border-color 0.2s, box-shadow 0.2s;
   }
-  .stat:hover { border-color: var(--border2); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+  .stat:hover { border-color: var(--border2); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
   .stat-value { font-size: 32px; font-weight: 700; line-height: 1; font-family: var(--mono); }
   .stat-bar { height: 3px; border-radius: 2px; background: var(--border); margin-top: 4px; overflow: hidden; }
@@ -283,7 +283,7 @@
   .ms-dropdown {
     position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
     background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px;
-    min-width: 100%; padding: 6px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    min-width: 100%; padding: 6px 0; box-shadow: 0 8px 24px rgba(0,0,0,0.1);
     display: none;
   }
   .ms-dropdown.open { display: block; }
@@ -310,7 +310,7 @@
     color: var(--accent2); border-radius: 20px; padding: 1px 7px; font-size: 11px; font-family: var(--mono);
   }
 
-  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: visible; box-shadow: 0 4px 24px rgba(0,0,0,0.25); }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: visible; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   .table-toolbar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 13px 20px; border-bottom: 1px solid var(--border); background: var(--surface2);
@@ -337,8 +337,8 @@
   tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: var(--surface2); }
-  tbody tr.received     { background: rgba(251,191,36,0.07); }
-  tbody tr.received:hover { background: rgba(251,191,36,0.11); }
+  tbody tr.received     { background: rgba(217,119,6,0.06); }
+  tbody tr.received:hover { background: rgba(217,119,6,0.10); }
   td { padding: 10px 10px; font-size: 13px; vertical-align: top; }
   td.mono { font-family: var(--mono); font-size: 11px; color: var(--text2); }
   td.id-cell { font-family: var(--mono); font-size: 11px; color: var(--text2); white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -374,6 +374,12 @@
   .badge-ARRIVED_AT_PROCESSING_FACILITY::before { background: var(--green); }
   .badge-PARTIALLY_RECEIVED { background: rgba(251,191,36,0.08); color: var(--amber); border: 1px solid rgba(251,191,36,0.15); }
   .badge-PARTIALLY_RECEIVED::before { background: var(--amber); }
+  .badge-SUBMITTED { background: rgba(61,111,255,0.14); color: var(--accent2); border: 1px solid rgba(61,111,255,0.2); }
+  .badge-SUBMITTED::before { background: var(--accent); }
+  .badge-PARTIALLY_COMPLETED { background: rgba(217,119,6,0.1); color: var(--amber); border: 1px solid rgba(217,119,6,0.2); }
+  .badge-PARTIALLY_COMPLETED::before { background: var(--amber); }
+  .badge-NOT_COMPLETED { background: rgba(220,38,38,0.1); color: var(--red); border: 1px solid rgba(220,38,38,0.2); }
+  .badge-NOT_COMPLETED::before { background: var(--red); }
 
   .new-tag {
     font-size: 9px; font-weight: 700; font-family: var(--mono);
@@ -391,7 +397,7 @@
     color: var(--text); padding: 12px 18px; border-radius: 9px;
     font-size: 13px; z-index: 999;
     transform: translateY(60px); opacity: 0; transition: all 0.22s;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     display: flex; align-items: center; gap: 8px;
   }
   .toast::before { content: '✓'; color: var(--green); font-weight: 700; }
@@ -405,7 +411,7 @@
     background: var(--navy); border: 1px solid var(--border2);
     color: var(--accent2); font-family: var(--mono); font-size: 11px;
     padding: 4px 9px; border-radius: 5px; white-space: nowrap;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.5); z-index: 200; pointer-events: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12); z-index: 200; pointer-events: none;
   }
   .sku-tooltip-wrap .sku-tip::after {
     content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
@@ -417,7 +423,7 @@
   .ps-hero {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 12px; padding: 28px 32px; margin-bottom: 24px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
   }
   .ps-search-row { display: flex; gap: 10px; align-items: center; }
   .ps-search-wrap { flex: 1; position: relative; }
@@ -634,29 +640,18 @@
   <div class="page-header">
     <div class="page-title">
       <h1>Customer Supplied Orders</h1>
-      <p>All Warehouses (excl. SLC)</p>
+      <p>All Warehouses (excl. SLC) — Live from API</p>
     </div>
     <div class="page-actions">
-      <button class="btn btn-primary" onclick="document.getElementById('csFileInput').click()">↑ Upload CSV</button>
-      <button class="btn btn-danger" onclick="csClearAll()">Clear All</button>
+      <button class="btn btn-primary" onclick="csClearAll()">Clear Local</button>
     </div>
-    <input type="file" id="csFileInput" accept=".csv" onchange="csHandleFile(event)">
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="stat-label">Total Open</div><div class="stat-value c-text" id="cs-statTotal">0</div><div class="stat-bar"><div class="stat-bar-fill" style="width:100%;background:var(--border2)"></div></div></div>
-    <div class="stat"><div class="stat-label">Expected</div><div class="stat-value c-accent" id="cs-statExpected">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barExpected" style="width:0%;background:var(--accent)"></div></div></div>
-    <div class="stat"><div class="stat-label">Partially Received</div><div class="stat-value c-amber" id="cs-statPartiallyReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barPartiallyReceived" style="width:0%;background:var(--amber)"></div></div></div>
-    <div class="stat"><div class="stat-label">Received in WH</div><div class="stat-value c-green" id="cs-statReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barReceived" style="width:0%;background:var(--green)"></div></div></div>
-    <div class="stat"><div class="stat-label">Completed</div><div class="stat-value c-green" id="cs-statCompleted">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barCompleted" style="width:0%;background:var(--green)"></div></div></div>
-  </div>
-
-  <div class="upload-area" id="csDropZone"
-    ondragover="event.preventDefault();this.classList.add('drag')"
-    ondragleave="this.classList.remove('drag')"
-    ondrop="csHandleDrop(event)"
-    onclick="document.getElementById('csFileInput').click()">
-    <p>↑ <strong>Drop Customer Supplied CSV here</strong> or click to browse — only new shipments will be added</p>
+    <div class="stat"><div class="stat-label">Total Orders</div><div class="stat-value c-text" id="cs-statTotal">0</div><div class="stat-bar"><div class="stat-bar-fill" style="width:100%;background:var(--border2)"></div></div></div>
+    <div class="stat"><div class="stat-label">Submitted</div><div class="stat-value c-accent" id="cs-statSubmitted">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barSubmitted" style="width:0%;background:var(--accent)"></div></div></div>
+    <div class="stat"><div class="stat-label">Processing</div><div class="stat-value c-purple" id="cs-statProcessing">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barProcessing" style="width:0%;background:var(--purple)"></div></div></div>
+    <div class="stat"><div class="stat-label">Partially Completed</div><div class="stat-value c-amber" id="cs-statPartiallyCompleted">0</div><div class="stat-bar"><div class="stat-bar-fill" id="cs-barPartiallyCompleted" style="width:0%;background:var(--amber)"></div></div></div>
   </div>
 
   <div class="controls">
@@ -669,7 +664,7 @@
       <div class="ms-dropdown" id="cs-warehouseMenu"></div>
     </div>
     <div class="ms-wrap" id="cs-categoryWrap">
-      <button class="ms-trigger" id="cs-categoryTrigger" data-all-label="All Categories" onclick="msToggle('cs-categoryMenu', this)">All Categories</button>
+      <button class="ms-trigger" id="cs-categoryTrigger" data-all-label="All Brands" onclick="msToggle('cs-categoryMenu', this)">All Brands</button>
       <div class="ms-dropdown" id="cs-categoryMenu"></div>
     </div>
     <div class="ms-wrap" id="cs-customerWrap">
@@ -679,8 +674,9 @@
     <div class="ms-wrap" id="cs-statusWrap">
       <button class="ms-trigger" id="cs-statusTrigger" data-all-label="All Statuses" onclick="msToggle('cs-statusMenu', this)">All Statuses</button>
       <div class="ms-dropdown" id="cs-statusMenu">
-        <label class="ms-option"><input type="checkbox" value="EXPECTED" onchange="csRenderTable()"> Expected</label>
-        <label class="ms-option"><input type="checkbox" value="PARTIALLY_RECEIVED" onchange="csRenderTable()"> Partially Received</label>
+        <label class="ms-option"><input type="checkbox" value="SUBMITTED" onchange="csRenderTable()"> Submitted</label>
+        <label class="ms-option"><input type="checkbox" value="PROCESSING" onchange="csRenderTable()"> Processing</label>
+        <label class="ms-option"><input type="checkbox" value="PARTIALLY_COMPLETED" onchange="csRenderTable()"> Partially Completed</label>
         <label class="ms-option"><input type="checkbox" value="RECEIVED" onchange="csRenderTable()"> Received in WH</label>
       </div>
     </div>
@@ -707,15 +703,15 @@
           <col style="width:130px"><!-- Action -->
         </colgroup>
         <thead><tr>
-          <th onclick="csSortBy('customer_name')">Customer</th>
+          <th onclick="csSortBy('organization')">Customer</th>
           <th onclick="csSortBy('product_title')">Product</th>
           <th>Copy</th>
-          <th onclick="csSortBy('expected_quantity')">Qty</th>
-          <th onclick="csSortBy('warehouse_name')">Warehouse</th>
-          <th onclick="csSortBy('purchase_order_number')">PO Number</th>
+          <th onclick="csSortBy('totalQty')">Qty</th>
+          <th onclick="csSortBy('warehouse')">Warehouse</th>
+          <th onclick="csSortBy('po_number')">PO Number</th>
           <th>Tracking</th>
           <th onclick="csSortBy('appStatus')">Status</th>
-          <th onclick="csSortBy('order_date')">Created Date</th>
+          <th onclick="csSortBy('created_date')">Created</th>
           <th>Comments</th>
           <th>Action</th>
         </tr></thead>
@@ -724,8 +720,8 @@
     </div>
     <div class="empty" id="cs-emptyState">
       <span class="empty-icon">🚚</span>
-      <div class="empty-title">No shipments to display</div>
-      Upload a CSV to get started
+      <div class="empty-title">No orders to display</div>
+      Data will load from the API
     </div>
   </div>
 </div>
@@ -849,12 +845,14 @@ function startRefreshCountdown() {
     } else {
       clearInterval(refreshTimer);
       invFetchFromAPI();
+      csFetchFromAPI();
     }
   }, 1000);
 }
 
 function manualRefresh() {
   invFetchFromAPI();
+  csFetchFromAPI();
 }
 
 // ─── INVENTORY ORDERS FROM GRAPHQL ───────────────────────────────────────────
@@ -924,7 +922,8 @@ async function invFetchFromAPI() {
           sort: [{ field: 'createdAt', direction: 'DESC' }]
         },
         filter: {
-          statuses: ['ORDERED', 'PROCESSING', 'SHIPPED']
+          statuses: ['ORDERED', 'PROCESSING', 'SHIPPED'],
+          firstbaseSupplied: true
         }
       };
 
@@ -1267,73 +1266,172 @@ function invMarkCompleted(fid) {
   showToast('Marked as Completed — order removed');
 }
 
-// ─── CUSTOMER SUPPLIED ORDERS ─────────────────────────────────────────────────
-const CS_SHOW_STATUSES = new Set(['PARTIALLY_RECEIVED','EXPECTED']);
+// ─── CUSTOMER SUPPLIED ORDERS (LIVE FROM API) ────────────────────────────────
 let csOrders  = {};
-let csSortCol = 'order_date', csSortDir = -1;
+let csSortCol = 'created_date', csSortDir = -1;
 let csNewIds  = new Set();
+let csExpanded = new Set();
 
-function csLoadState()  { try { const s=localStorage.getItem('inbound_tracker_cs_v1'); if(s) csOrders=JSON.parse(s).orders||{}; } catch(e){} }
-function csSaveState()  { try { localStorage.setItem('inbound_tracker_cs_v1', JSON.stringify({orders:csOrders})); } catch(e){} }
+function csLoadState()  { try { const s=localStorage.getItem('inbound_tracker_cs_v2'); if(s) csOrders=JSON.parse(s).orders||{}; } catch(e){} }
+function csSaveState()  { try { localStorage.setItem('inbound_tracker_cs_v2', JSON.stringify({orders:csOrders})); } catch(e){} }
 function csClearAll()   {
-  if (!confirm('Clear all Customer Supplied Orders?')) return;
-  csOrders={}; csNewIds.clear(); csSaveState(); csRenderAll();
-  showToast('Customer Supplied Orders cleared');
+  if (!confirm('Clear all local Customer Supplied Orders state?')) return;
+  csOrders={}; csNewIds.clear(); csExpanded.clear(); csSaveState(); csRenderAll();
+  showToast('Local customer supplied orders cleared');
 }
-function csHandleDrop(e) { e.preventDefault(); document.getElementById('csDropZone').classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f) csProcessFile(f); }
-function csHandleFile(e) { const f=e.target.files[0]; if(f) csProcessFile(f); e.target.value=''; }
-function csProcessFile(file) {
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const rows = parseCSV(ev.target.result);
-    let added=0; csNewIds.clear();
-    const threeMonthsAgo = new Date(); threeMonthsAgo.setMonth(threeMonthsAgo.getMonth()-3);
-    rows.forEach(row => {
-      const id = row.shipment_notice_package_item_id; if (!id) return;
-      const csWh = (row.warehouse_name || '').trim();
-      if (csWh.toLowerCase().includes('slc')) return;
-      const pkgStatus = (row.shipment_notice_package_item_status||'').toUpperCase();
-      if (pkgStatus === 'PARTIALLY_RECEIVED') {
-        const orderDate = new Date(row.order_date);
-        if (!isNaN(orderDate) && orderDate < threeMonthsAgo) { if(csOrders[id]) delete csOrders[id]; return; }
+
+async function csFetchFromAPI() {
+  try {
+    const allOrders = [];
+    let pageNumber = 1;
+    const pageSize = 100;
+    let hasMore = true;
+
+    while (hasMore) {
+      const query = `query GetShipmentNoticeOrders($paging: PagingAndSorting!, $filter: ShipmentNoticeOrderFilter) {
+  getShipmentNoticeOrders(pagingAndSorting: $paging, shipmentNoticeOrderFilter: $filter) {
+    data {
+      id
+      status
+      condition
+      purchaseOrderNumber
+      createdAt
+      updatedAt
+      sourceType
+      organization { id name }
+      warehouse { id name }
+      shipmentNoticeOrderItems {
+        id quantity status description
+        sku { id vendorSku skuInformation { productTitle partNumber } vendor { name } category { nameSingular } }
       }
-      if (!CS_SHOW_STATUSES.has(pkgStatus)) { if(csOrders[id]) delete csOrders[id]; return; }
-      if (!csOrders[id]) {
-        csOrders[id] = {...row, appStatus:pkgStatus, _origStatus:pkgStatus, addedAt:new Date().toISOString()};
-        csNewIds.add(id); added++;
-      } else {
-        if (csOrders[id].appStatus !== 'RECEIVED') {
-          csOrders[id] = {...csOrders[id], ...row, appStatus:pkgStatus, _origStatus:pkgStatus};
+      shipmentNoticePackages {
+        id trackingCode trackingUrl shippingCarrier status
+      }
+    }
+    totalElements totalPages pageNumber size
+  }
+}`;
+
+      const variables = {
+        paging: {
+          pageNumber: pageNumber,
+          pageSize: pageSize,
+          sort: [{ field: 'createdAt', direction: 'DESC' }]
+        },
+        filter: {
+          shipmentNoticeOrderStatuses: ['SUBMITTED', 'PROCESSING', 'PARTIALLY_COMPLETED']
         }
+      };
+
+      const res = await fetch(API_GRAPHQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables })
+      });
+
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
+
+      const pageData = json.data?.getShipmentNoticeOrders?.data || [];
+      allOrders.push(...pageData);
+
+      const totalPages = json.data?.getShipmentNoticeOrders?.totalPages || 0;
+      pageNumber++;
+      hasMore = pageNumber < totalPages;
+    }
+
+    // Preserve local state (received/completed markers)
+    const preservedState = {};
+    try {
+      const s = localStorage.getItem('inbound_tracker_cs_v2');
+      if (s) {
+        const prev = JSON.parse(s).orders || {};
+        Object.entries(prev).forEach(([id, o]) => {
+          preservedState[id] = { appStatus: o.appStatus, receivedAt: o.receivedAt };
+        });
+      }
+    } catch(e) {}
+
+    csOrders = {};
+    csNewIds.clear();
+
+    allOrders.forEach(order => {
+      const fid = order.id;
+      const wh = order.warehouse?.name || '';
+      if (isBlockedWarehouse(wh)) return;
+
+      const items = (order.shipmentNoticeOrderItems || []).map(item => ({
+        order_item_id: item.id || '',
+        brand: item.sku?.vendor?.name || '',
+        product_title: item.sku?.skuInformation?.productTitle || item.description || '',
+        quantity: item.quantity || 0,
+        item_status: item.status || 'EXPECTED',
+        sku_id: item.sku?.id || '',
+        mpn: item.sku?.skuInformation?.partNumber || item.sku?.vendorSku || '',
+        category: item.sku?.category?.nameSingular || ''
+      }));
+
+      const packages = order.shipmentNoticePackages || [];
+
+      const totalQty = items.reduce((s, it) => s + (it.quantity || 0), 0);
+
+      const preserved = preservedState[fid] || {};
+      const appStatus = preserved.appStatus === 'RECEIVED'
+        ? 'RECEIVED'
+        : order.status || 'SUBMITTED';
+
+      csOrders[fid] = {
+        friendly_order_id: fid,
+        organization: order.organization?.name || '',
+        warehouse: wh,
+        po_number: order.purchaseOrderNumber || '',
+        created_date: order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : '',
+        order_status: order.status || '',
+        condition: order.condition || '',
+        source_type: order.sourceType || '',
+        totalQty: totalQty,
+        appStatus: appStatus,
+        receivedAt: preserved.receivedAt || '',
+        items: items,
+        packages: packages
+      };
+
+      if (items.length === 1) {
+        csOrders[fid].product_title = items[0].product_title;
+        csOrders[fid].sku_id = items[0].sku_id;
+      } else if (items.length > 1) {
+        csOrders[fid].product_title = `${items.length} items`;
+        csOrders[fid].sku_id = '';
+      } else {
+        csOrders[fid].product_title = '—';
+        csOrders[fid].sku_id = '';
       }
     });
+
     csSaveState();
-    csRenderAll(); showToast(`${added} new customer supplied shipments added`);
-  };
-  reader.readAsText(file);
+    csRenderAll();
+  } catch(err) {
+    console.error('CS API fetch error:', err);
+  }
 }
-function csMarkReceived(id) {
-  if (!csOrders[id]) return;
-  csOrders[id].appStatus='RECEIVED'; csOrders[id].receivedAt=new Date().toISOString();
+function csMarkReceived(fid) {
+  if (!csOrders[fid]) return;
+  csOrders[fid].appStatus='RECEIVED'; csOrders[fid].receivedAt=new Date().toISOString();
   csSaveState(); csRenderAll(); showToast('Marked as Received in WH');
 }
-function csUnreceive(id) {
-  if (!csOrders[id]) return;
-  csOrders[id].appStatus = csOrders[id]._origStatus || 'EXPECTED';
-  delete csOrders[id].receivedAt;
+function csUnreceive(fid) {
+  if (!csOrders[fid]) return;
+  csOrders[fid].appStatus = csOrders[fid].order_status || 'SUBMITTED';
+  delete csOrders[fid].receivedAt;
   csSaveState(); csRenderAll(); showToast('Marked as unreceived');
 }
-function csMarkCompleted(id) {
-  if (!csOrders[id]) return;
-  delete csOrders[id]; csSaveState(); csRenderAll();
-  showToast('Marked as Completed — shipment removed');
-}
 function csUpdateFilters() {
-  const whs = [...new Set(Object.values(csOrders).map(o => o.warehouse_name).filter(Boolean))].sort();
+  const whs = [...new Set(Object.values(csOrders).map(o => o.warehouse).filter(Boolean))].sort();
   msPopulateDynamic('cs-warehouseMenu', 'cs-warehouseTrigger', whs, 'All Warehouses');
-  const cats = [...new Set(Object.values(csOrders).map(o => o.category).filter(Boolean))].sort();
-  msPopulateDynamic('cs-categoryMenu', 'cs-categoryTrigger', cats, 'All Categories');
-  const custs = [...new Set(Object.values(csOrders).map(o => o.customer_name).filter(Boolean))].sort();
+  const cats = [...new Set(Object.values(csOrders).flatMap(o => (o.items||[]).map(it => it.brand)).filter(Boolean))].sort();
+  msPopulateDynamic('cs-categoryMenu', 'cs-categoryTrigger', cats, 'All Brands');
+  const custs = [...new Set(Object.values(csOrders).map(o => o.organization).filter(Boolean))].sort();
   msPopulateDynamic('cs-customerMenu', 'cs-customerTrigger', custs, 'All Customers');
 }
 function csGetFiltered() {
@@ -1343,11 +1441,11 @@ function csGetFiltered() {
   const custs=[...document.querySelectorAll('#cs-customerMenu input:checked')].map(c=>c.value);
   const checked=[...document.querySelectorAll('#cs-statusMenu input:checked')].map(c=>c.value);
   return Object.values(csOrders).filter(o=>{
-    if (whs.length   && !whs.includes(o.warehouse_name))  return false;
-    if (cats.length  && !cats.includes(o.category))       return false;
-    if (custs.length && !custs.includes(o.customer_name)) return false;
+    if (whs.length   && !whs.includes(o.warehouse))      return false;
+    if (cats.length  && !cats.some(c => (o.items||[]).some(it => it.brand === c))) return false;
+    if (custs.length && !custs.includes(o.organization))  return false;
     if (checked.length && !checked.includes(o.appStatus)) return false;
-    if (search) { const hay=[o.customer_name,o.product_title,o.warehouse_name,o.purchase_order_number,o.tracking_code].join(' ').toLowerCase(); if(!hay.includes(search)) return false; }
+    if (search) { const hay=[o.organization,o.product_title,o.warehouse,o.po_number,o.friendly_order_id].join(' ').toLowerCase(); if(!hay.includes(search)) return false; }
     return true;
   });
 }
@@ -1355,63 +1453,72 @@ function csSortBy(col) { if(csSortCol===col) csSortDir*=-1; else{csSortCol=col;c
 function csRenderAll()  { csUpdateFilters(); csRenderTable(); csRenderStats(); updateTabCounts(); }
 function csRenderStats() {
   const all=Object.values(csOrders);
-  function countShipments(items) {
-    const pos = new Set();
-    items.forEach(o => pos.add(o.purchase_order_number || o.shipment_notice_package_item_id));
-    return pos.size;
-  }
-  const total=countShipments(all)||1;
-  const expected=all.filter(o=>o.appStatus==='EXPECTED');
-  const partRec=all.filter(o=>o.appStatus==='PARTIALLY_RECEIVED');
-  const received=all.filter(o=>o.appStatus==='RECEIVED');
-  const c={expected:countShipments(expected),partiallyReceived:countShipments(partRec),received:countShipments(received),completed:0};
-  document.getElementById('cs-statTotal').textContent=total;
-  document.getElementById('cs-statExpected').textContent=c.expected;
-  document.getElementById('cs-statPartiallyReceived').textContent=c.partiallyReceived;
-  document.getElementById('cs-statReceived').textContent=c.received;
-  document.getElementById('cs-statCompleted').textContent=c.completed;
-  document.getElementById('cs-barExpected').style.width=(c.expected/total*100)+'%';
-  document.getElementById('cs-barPartiallyReceived').style.width=(c.partiallyReceived/total*100)+'%';
-  document.getElementById('cs-barReceived').style.width=(c.received/total*100)+'%';
-  document.getElementById('cs-barCompleted').style.width='0%';
+  const total=all.length||1;
+  const c={submitted:0,processing:0,partiallyCompleted:0};
+  all.forEach(o=>{
+    switch(o.appStatus) {
+      case 'SUBMITTED': c.submitted++; break;
+      case 'PROCESSING': c.processing++; break;
+      case 'PARTIALLY_COMPLETED': c.partiallyCompleted++; break;
+    }
+  });
+  document.getElementById('cs-statTotal').textContent=all.length;
+  document.getElementById('cs-statSubmitted').textContent=c.submitted;
+  document.getElementById('cs-statProcessing').textContent=c.processing;
+  document.getElementById('cs-statPartiallyCompleted').textContent=c.partiallyCompleted;
+  document.getElementById('cs-barSubmitted').style.width=(c.submitted/total*100)+'%';
+  document.getElementById('cs-barProcessing').style.width=(c.processing/total*100)+'%';
+  document.getElementById('cs-barPartiallyCompleted').style.width=(c.partiallyCompleted/total*100)+'%';
 }
-const CS_BADGE_LABELS = {
-  'EXPECTED':'Expected','PARTIALLY_RECEIVED':'Partially Received','RECEIVED':'Received in WH'
+const CS_STATUS_LABELS = {
+  'SUBMITTED': 'Submitted',
+  'PROCESSING': 'Processing',
+  'PARTIALLY_COMPLETED': 'Partially Completed',
+  'COMPLETED': 'Completed',
+  'NOT_COMPLETED': 'Not Completed',
+  'CANCELLED': 'Cancelled',
+  'RECEIVED': 'Received in WH'
 };
+
 function csRenderTable() {
   const rows=csGetFiltered();
-  rows.sort((a,b)=>{ let av=a[csSortCol]||'',bv=b[csSortCol]||''; if(csSortCol==='expected_quantity'){av=+av;bv=+bv;} return av<bv?-csSortDir:av>bv?csSortDir:0; });
+  rows.sort((a,b)=>{ let av=a[csSortCol]||'',bv=b[csSortCol]||''; if(csSortCol==='totalQty'){av=+av;bv=+bv;} return av<bv?-csSortDir:av>bv?csSortDir:0; });
   const tbody=document.getElementById('cs-tableBody');
   const empty=document.getElementById('cs-emptyState');
-  const newInView=rows.filter(r=>csNewIds.has(r.shipment_notice_package_item_id)).length;
   document.getElementById('cs-rowCount').textContent=rows.length;
-  document.getElementById('cs-newCount').textContent=newInView>0?`+${newInView} new this upload`:'';
+  document.getElementById('cs-newCount').textContent='';
   if(rows.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   tbody.innerHTML=rows.map(o=>{
-    const id=o.shipment_notice_package_item_id;
-    const isNew=csNewIds.has(id);
+    const fid=o.friendly_order_id;
     const isRec=o.appStatus==='RECEIVED';
-    const eid=id.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const statusLabel = CS_STATUS_LABELS[o.appStatus] || o.appStatus;
+    const efid=fid.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const ceprod=(o.product_title||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+
     let btn = isRec
-      ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="csUnreceive('${eid}')">↩ Unreceive</button><button class="btn-complete" onclick="csMarkCompleted('${eid}')">Mark Completed</button></div>`
-      : `<button class="btn-receive" onclick="csMarkReceived('${eid}')">Mark Received</button>`;
-    let tracking;
-    if (o.tracking_url) tracking=`<a class="tracking-link" href="${o.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${o.tracking_code||''}">${o.tracking_code||'Track'}</a>`;
-    else if (o.tracking_code) tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.tracking_code}">${o.tracking_code}</span>`;
-    else tracking='—';
+      ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="csUnreceive('${efid}')">↩ Unreceive</button></div>`
+      : `<button class="btn-receive" onclick="csMarkReceived('${efid}')">Mark Received</button>`;
+
+    // Build tracking from packages
+    let tracking = '—';
+    const trackedPkg = (o.packages||[]).find(p => p.trackingUrl || p.trackingCode);
+    if (trackedPkg) {
+      if (trackedPkg.trackingUrl) tracking=`<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>`;
+      else tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>`;
+    }
+
     return `<tr class="${isRec?'received':''}">
-      <td>${o.customer_name||'—'}${isNew?'<span class="new-tag">new</span>':''}</td>
+      <td>${o.organization||'—'}</td>
       <td class="product-cell"><span class="sku-tooltip-wrap">${o.product_title||'—'}<span class="sku-tip">SKU: ${o.sku_id||'—'}</span></span></td>
-      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="csCopyId('${eid}',this)">⎘ SKU</button><button class="btn-copy" onclick="csCopyIdProduct('${eid}','${ceprod}',this)">⎘ SKU+Product</button></div></td>
-      <td class="mono">${o.expected_quantity||'—'}</td>
-      <td class="mono">${whLabel(o.warehouse_name||'')}</td>
-      <td class="mono">${o.purchase_order_number||'—'}</td>
+      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="csCopyId('${efid}',this)">⎘ SKU</button><button class="btn-copy" onclick="csCopyIdProduct('${efid}','${ceprod}',this)">⎘ SKU+Product</button></div></td>
+      <td class="mono">${o.totalQty||'—'}</td>
+      <td class="mono">${whLabel(o.warehouse||'')}</td>
+      <td class="mono">${o.po_number||'—'}</td>
       <td style="max-width:130px;overflow:hidden">${tracking}</td>
-      <td><span class="badge badge-${o.appStatus}">${CS_BADGE_LABELS[o.appStatus]||o.appStatus}</span></td>
-      <td class="date-cell">${fmtDate(o.order_date)}</td>
-      <td class="comment-cell">${commentInput(id)}</td>
+      <td><span class="badge badge-${o.appStatus}">${statusLabel}</span></td>
+      <td class="date-cell">${fmtDate(o.created_date)}</td>
+      <td class="comment-cell">${commentInput(fid)}</td>
       <td>${btn}</td></tr>`;
   }).join('');
 }
@@ -1692,8 +1799,7 @@ function switchTab(tab) {
 }
 function updateTabCounts() {
   document.getElementById('tabCount-inv').textContent = Object.keys(invOrders).length;
-  const csPOs = new Set(Object.values(csOrders).map(o=>o.purchase_order_number||o.shipment_notice_package_item_id));
-  document.getElementById('tabCount-cs').textContent = csPOs.size;
+  document.getElementById('tabCount-cs').textContent = Object.keys(csOrders).length;
 }
 
 // ─── MULTI-SELECT DROPDOWNS ───────────────────────────────────────────────────
@@ -1771,6 +1877,7 @@ csRenderAll();
 
 setSyncStatus('syncing', 'Loading from API…');
 invFetchFromAPI();
+csFetchFromAPI();
 </script>
 </body>
 </html>
