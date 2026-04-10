@@ -924,7 +924,7 @@ async function invFetchFromAPI() {
           sort: [{ field: 'createdAt', direction: 'DESC' }]
         },
         filter: {
-          statuses: ['ORDERED', 'SHIPPED', 'ARRIVED_AT_PROCESSING_FACILITY', 'OUT_FOR_DELIVERY']
+          statuses: ['SUBMITTED', 'ORDERED', 'PROCESSING', 'SHIPPED', 'PARTIALLY_RECEIVED', 'RECEIVED']
         }
       };
 
