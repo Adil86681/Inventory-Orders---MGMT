@@ -1,79 +1,66 @@
 /**
- * Vercel Serverless Function — GraphQL Proxy
+ * Vercel Serverless Function — /api/graphql
  *
- * Handles OAuth2 token management and proxies requests
- * to the Firstbase GraphQL API.
- *
- * POST /api/graphql  →  forwards to https://api.firstbasehq.com/graphql
+ * Proxies GraphQL requests to the Firstbase API.
+ * Handles OAuth client_credentials token exchange server-side
+ * (required because Firstbase auth blocks browser token requests).
  */
 
-const fetch = require('node-fetch');
+const AUTH_TOKEN_URL = 'https://auth.firstbasehq.com/oauth2/default/v1/token';
+const AUTH_BASIC     = 'Basic MG9hdTA0ajNic3ZlNnZwanc1ZDc6TWl3RTBtU3g5TWlDRFQ1c2M5TlJDZktNMnN2SjBkZ0dZUWxqQTc3ZHhkNUNuZU0tSnpmSF9PS1c2b1AzZk1HSQ==';
+const AUTH_SCOPE     = 'firstbase:service-accounts';
+const GRAPHQL_URL    = 'https://api.firstbasehq.com/graphql';
 
-const AUTH_URL     = 'https://auth.firstbasehq.com/oauth2/default/v1/token';
-const GRAPHQL_URL  = 'https://api.firstbasehq.com/graphql';
-const CLIENT_ID    = process.env.FB_CLIENT_ID    || '0oau04j3bsve6vpjw5d7';
-const CLIENT_SECRET = process.env.FB_CLIENT_SECRET || 'MiwE0mSx9MiCDT5sc9NRCfKM2svJ0dgGYQljA77dxd5CneM-JzfH_OKW6oP3fMGI';
-const BASIC_AUTH   = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
+// Token cache (persists across warm invocations on the same Vercel instance)
+let cachedToken    = null;
+let tokenExpiresAt = 0;
 
-// ─── Token Cache (persists across warm invocations) ─────────────────────
-let cachedToken = null;
-let tokenExpiry = 0;
-
-async function getToken() {
-  if (cachedToken && Date.now() < tokenExpiry - 300000) {
+async function getAccessToken() {
+  if (cachedToken && Date.now() < tokenExpiresAt - 60000) {
     return cachedToken;
   }
 
-  const res = await fetch(AUTH_URL, {
+  const res = await fetch(AUTH_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${BASIC_AUTH}`
+      'Authorization': AUTH_BASIC
     },
-    body: 'grant_type=client_credentials&scope=firstbase:m2m:read-only'
+    body: `grant_type=client_credentials&scope=${encodeURIComponent(AUTH_SCOPE)}`
   });
 
-  const data = await res.json();
-  if (!data.access_token) {
-    throw new Error('Token fetch failed: ' + JSON.stringify(data));
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Token request failed (${res.status}): ${errBody}`);
   }
 
-  cachedToken = data.access_token;
-  tokenExpiry = Date.now() + (data.expires_in * 1000);
+  const data = await res.json();
+  cachedToken    = data.access_token;
+  tokenExpiresAt = Date.now() + (data.expires_in || 3600) * 1000;
   return cachedToken;
 }
 
-// ─── Handler ────────────────────────────────────────────────────────────
-module.exports = async function handler(req, res) {
-  // CORS headers for local dev
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed. Use POST.' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const token = await getToken();
+    const token = await getAccessToken();
 
-    const gqlRes = await fetch(GRAPHQL_URL, {
+    const apiRes = await fetch(GRAPHQL_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(req.body)
     });
 
-    const data = await gqlRes.json();
-    return res.status(200).json(data);
+    const data = await apiRes.json();
+    res.status(apiRes.status).json(data);
   } catch (err) {
-    console.error('[GraphQL Proxy Error]', err.message);
-    return res.status(502).json({ errors: [{ message: err.message }] });
+    console.error('[api/graphql] Proxy error:', err.message);
+    res.status(502).json({ error: err.message });
   }
-};
+}
