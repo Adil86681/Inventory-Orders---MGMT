@@ -2436,14 +2436,15 @@ function pmCompare() {
     }
   }
 
-  // Build GRV PO map: po -> first matching row
+  // Build GRV PO map: po -> array of all matching rows (multiple serials per PO)
   const grvPoMap = {};
   for (const row of pmState.file2) {
     const ref = row['RECEIVING_REFERENCE_1'] || '';
     const sources = ref ? [ref] : [Object.values(row).join(' ')];
     for (const src of sources) {
       for (const po of pmExtractPOs(src)) {
-        if (!grvPoMap[po]) grvPoMap[po] = row;
+        if (!grvPoMap[po]) grvPoMap[po] = [];
+        grvPoMap[po].push(row);
       }
     }
   }
@@ -2472,7 +2473,7 @@ function pmCompare() {
 function pmRenderTable(tableId, pos, mgmtMap, grvMap, isMatched) {
   const tbl = document.getElementById(tableId);
   const cols = isMatched
-    ? ['PO Number','Client','Product','Qty','Status','Warehouse','GRV REF','GRV Item']
+    ? ['PO Number','Client','Product','Qty','Status','Warehouse','Serials (MSN)']
     : ['PO Number','Client','Product','Qty','Status','Warehouse','Expected Ship'];
 
   let html = '<thead><tr>';
@@ -2486,11 +2487,35 @@ function pmRenderTable(tableId, pos, mgmtMap, grvMap, isMatched) {
   const sorted = pos.slice().sort();
   for (const po of sorted) {
     const m = mgmtMap[po] || {};
-    const g = isMatched ? (grvMap[po] || {}) : {};
+    const gRows = isMatched ? (grvMap[po] || []) : [];
     const status = m['Order Item Status'] || '—';
     const badge = pmStatusBadge(status);
     const product = (m['Product Title'] || '—').substring(0, 52);
     const wh = (m['Ship-to Warehouse'] || '—').replace('Warehouse - ','').replace('Warehouse ','');
+
+    // Build serials cell
+    let serialsHtml = '';
+    if (isMatched) {
+      const serials = gRows.map(r => (r['MSN'] || '')).filter(s => s && s !== '.' && s !== 'None');
+      if (serials.length === 0) {
+        serialsHtml = '<span style="color:var(--muted);font-size:11px;">—</span>';
+      } else {
+        const uid = 'pm-ser-' + po;
+        const allSerial = serials.join('\n');
+        serialsHtml += '<div style="display:flex;flex-direction:column;gap:4px;">';
+        serials.forEach((s, i) => {
+          serialsHtml += '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span style="font-family:var(--mono);font-size:11px;color:var(--text);">' + s + '</span>' +
+            '<button onclick="pmCopyText(\'' + s.replace(/'/g,"\\'") + '\',this)" style="font-size:10px;font-family:var(--mono);font-weight:500;padding:1px 6px;border-radius:4px;border:1px solid var(--border);background:var(--surface3);color:var(--muted);cursor:pointer;white-space:nowrap;transition:all 0.15s;" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent2)\';" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\';">copy</button>' +
+            '</div>';
+        });
+        if (serials.length > 1) {
+          serialsHtml += '<button onclick="pmCopyText(\'' + serials.join('\\n').replace(/'/g,"\\'") + '\',this)" style="font-size:10px;font-family:var(--mono);font-weight:600;padding:2px 8px;border-radius:4px;border:1px solid rgba(61,111,255,0.3);background:rgba(61,111,255,0.08);color:var(--accent2);cursor:pointer;margin-top:2px;transition:all 0.15s;">copy all (' + serials.length + ')</button>';
+        }
+        serialsHtml += '</div>';
+      }
+    }
+
     html += '<tr>';
     html += '<td><span style="font-family:var(--mono);font-size:12px;">' + po + '</span></td>';
     html += '<td>' + (m['i'] || '—') + '</td>';
@@ -2499,8 +2524,7 @@ function pmRenderTable(tableId, pos, mgmtMap, grvMap, isMatched) {
     html += '<td>' + badge + '</td>';
     html += '<td>' + wh + '</td>';
     if (isMatched) {
-      html += '<td><span style="font-family:var(--mono);font-size:11px;">' + (g['RECEIVING_REFERENCE_1'] || '—') + '</span></td>';
-      html += '<td style="max-width:200px;">' + (g['ITEM_DESCRIPTION'] || '—').substring(0,42) + '</td>';
+      html += '<td>' + serialsHtml + '</td>';
     } else {
       html += '<td>' + (m['Expected Ship Date'] || '—') + '</td>';
     }
@@ -2508,6 +2532,22 @@ function pmRenderTable(tableId, pos, mgmtMap, grvMap, isMatched) {
   }
   html += '</tbody>';
   tbl.innerHTML = html;
+}
+
+function pmCopyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'copied!';
+    btn.style.borderColor = 'var(--green-dim)';
+    btn.style.color = 'var(--green)';
+    btn.style.background = 'rgba(22,163,74,0.08)';
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.style.borderColor = '';
+      btn.style.color = '';
+      btn.style.background = '';
+    }, 1800);
+  });
 }
 
 function pmStatusBadge(status) {
