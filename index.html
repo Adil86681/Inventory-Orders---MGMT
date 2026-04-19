@@ -942,6 +942,20 @@
       <div class="fbinv-stat"><div class="fbinv-stat-label">Returned</div><div class="fbinv-stat-value c-red" id="fbinv-statReturned">—</div></div>
     </div>
 
+    <!-- Column mapping inspector -->
+    <div id="fbinv-mapping-bar" style="padding:0 24px 0;margin-bottom:4px;">
+      <button onclick="fbinvToggleMapping()" style="font-size:11px;font-family:var(--mono);color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 0;text-decoration:underline dotted;">
+        🔍 Show column mappings
+      </button>
+      <div id="fbinv-mapping-panel" style="display:none;margin-top:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);margin-bottom:10px;">Column Mappings — CSV header → logical field</div>
+        <div id="fbinv-mapping-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px;font-size:12px;font-family:var(--mono);"></div>
+        <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+          Unmapped CSV headers (not used): <span id="fbinv-mapping-unused" style="color:var(--muted);"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="fbinv-controls">
       <div class="fbinv-search-wrap">
         <span class="fbinv-search-icon">⌕</span>
@@ -2968,10 +2982,16 @@ function fbinvLoadCSV(text, filename) {
   of_.innerHTML = '<option value="">All Orgs</option>' +
     uniq('organizationName').map(s => `<option value="${s}">${s}</option>`).join('');
 
-  // Warehouse filter
+  // Warehouse filter — read directly from the raw CSV column to avoid any fbinvGet indirection
   const wf = document.getElementById('fbinv-warehouseFilter');
+  const _whCol = fbinvColMap.warehouseName;
+  console.log('[fbinv] warehouseName mapped to CSV col:', _whCol);
+  const _whVals = _whCol
+    ? [...new Set(data.map(r => (r[_whCol] || '').trim()).filter(Boolean))].sort()
+    : [];
+  console.log('[fbinv] warehouse unique values:', _whVals);
   wf.innerHTML = '<option value="">All Warehouses</option>' +
-    uniq('warehouseName').map(s => `<option value="${s}">${s}</option>`).join('');
+    _whVals.map(s => `<option value="${s}">${s}</option>`).join('');
 
   // Stats
   const ns = s => (s||'').toUpperCase().replace(/[\s-]/g,'_');
@@ -2995,9 +3015,8 @@ function fbinvLoadCSV(text, filename) {
     { key:'skuId',           label:'SKU ID' },
     { key:'deployStatus',    label:'Status' },
     { key:'conditionStatus', label:'Condition' },
-    !empSameAsWh && { key:'employeeName',    label:'Employee' },
+    { key:'employeeName',    label:'Warehouse' },
     { key:'organizationName',label:'Organisation' },
-    { key:'warehouseName',   label:'Warehouse' },
     { key:'regionName',      label:'Region' },
     { key:'createdAt',       label:'Created' },
   ].filter(Boolean);
@@ -3019,10 +3038,74 @@ function fbinvLoadCSV(text, filename) {
     `Loaded ${new Date().toLocaleTimeString()}`;
   document.getElementById('fbinv-search').value = '';
 
+  // Build mapping inspector
+  fbinvBuildMappingPanel(headers);
+
   document.getElementById('fbinv-upload-state').style.display = 'none';
   document.getElementById('fbinv-data-state').style.display   = 'block';
 
   fbinvRender();
+}
+
+function fbinvBuildMappingPanel(headers) {
+  const logicalLabels = {
+    serialNumber:     'Serial #',
+    deployStatus:     'Deploy Status',
+    conditionStatus:  'Condition',
+    productTitle:     'Product Title',
+    genericCategory:  'Category',
+    skuId:            'SKU ID',
+    employeeName:     'Warehouse',
+    employeeSurname:  'Employee Surname',
+    organizationName: 'Organisation',
+    warehouseName:    'Warehouse',
+    vendorName:       'Vendor',
+    regionName:       'Region',
+    officeName:       'Office',
+    createdAt:        'Created At',
+    updatedAt:        'Updated At',
+  };
+  const usedHeaders = new Set();
+  const rows = [];
+  for (const [key, label] of Object.entries(logicalLabels)) {
+    const csvCol = fbinvColMap[key];
+    if (csvCol) {
+      usedHeaders.add(csvCol);
+      rows.push({ label, csvCol, matched: true });
+    } else {
+      rows.push({ label, csvCol: null, matched: false });
+    }
+  }
+  const unused = headers.filter(h => !usedHeaders.has(h));
+
+  const grid = document.getElementById('fbinv-mapping-grid');
+  grid.innerHTML = rows.map(r => {
+    const colour = r.matched ? 'var(--green,#22c55e)' : 'var(--muted)';
+    const icon   = r.matched ? '✓' : '✗';
+    const val    = r.matched
+      ? `<span style="color:var(--text);background:var(--surface3);border:1px solid var(--border2);padding:1px 7px;border-radius:4px;">${r.csvCol}</span>`
+      : `<span style="color:var(--muted);font-style:italic;">not found</span>`;
+    return `<div style="display:flex;align-items:center;gap:6px;">
+      <span style="color:${colour};font-size:13px;width:14px;flex-shrink:0;">${icon}</span>
+      <span style="color:var(--muted);min-width:130px;">${r.label}</span>
+      <span>→</span>${val}
+    </div>`;
+  }).join('');
+
+  document.getElementById('fbinv-mapping-unused').textContent =
+    unused.length ? unused.join(', ') : 'none';
+
+  // Reset toggle button label
+  document.getElementById('fbinv-mapping-bar').querySelector('button').textContent = '🔍 Show column mappings';
+  document.getElementById('fbinv-mapping-panel').style.display = 'none';
+}
+
+function fbinvToggleMapping() {
+  const panel = document.getElementById('fbinv-mapping-panel');
+  const btn   = document.getElementById('fbinv-mapping-bar').querySelector('button');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? '🔍 Hide column mappings' : '🔍 Show column mappings';
 }
 
 function fbinvReset() {
