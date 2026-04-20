@@ -616,6 +616,9 @@
   <button class="tab-btn" onclick="switchTab('liveInv')" id="tabBtn-liveInv">
     🗃️ Inventory <span class="tab-count" id="tabCount-liveInv">0</span>
   </button>
+  <button class="tab-btn" onclick="switchTab('products')" id="tabBtn-products">
+    🛒 Products <span class="tab-count" id="tabCount-products">0</span>
+  </button>
 </div>
 
 <!-- ═══ INVENTORY ORDERS TAB ═══ -->
@@ -865,6 +868,55 @@
           <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Click Refresh, or switch to this tab to load live inventory…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══ PRODUCTS TAB (live getAllSKUs) ═══ -->
+<div class="tab-panel" id="panel-products">
+<div class="app">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Products</h1>
+      <p id="products-subtitle">Live from Firstbase API · catalog</p>
+    </div>
+    <div class="page-actions">
+      <span id="products-syncText" style="font-size:12px;font-family:var(--mono);color:var(--muted);align-self:center;"></span>
+      <button class="btn btn-primary" onclick="productsFetch(1)" id="products-refreshBtn">↺ Refresh</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="products-search" placeholder="Search by product title or MPN — type any characters…" autocomplete="off" oninput="productsOnSearchInput()">
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-toolbar">
+      <div class="table-toolbar-left">Products <span class="count-badge" id="products-rowCount">0</span></div>
+      <div class="table-toolbar-right" id="products-pageInfo"></div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          <th style="width:56px;">Image</th>
+          <th>Product Title</th>
+          <th>MPN</th>
+          <th>Status</th>
+          <th>Category</th>
+          <th>Vendor</th>
+        </tr></thead>
+        <tbody id="products-tableBody">
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Switch to this tab to load products…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="fbinv-pagination">
+      <span id="products-paging-info">—</span>
+      <div class="fbinv-pg-btns" id="products-pg-btns"></div>
     </div>
   </div>
 </div>
@@ -2255,6 +2307,9 @@ function switchTab(tab) {
   if (tab === 'liveInv' && !liveInvLoaded && !liveInvLoading) {
     liveInvFetch();
   }
+  if (tab === 'products' && !productsLoaded && !productsLoading) {
+    productsFetch(1);
+  }
   // fbinv tab is upload-driven — no auto-load needed
 }
 
@@ -3244,6 +3299,170 @@ function liveInvRender() {
       <td style="font-family:var(--mono);font-size:11px">${liveInvEsc(fmtDate(r.createdAt))}</td>
     </tr>`;
   }).join('');
+}
+
+// ─── PRODUCTS TAB (getAllSKUs via /api/graphql) ──────────────────────────────
+let productsLoaded = false;
+let productsLoading = false;
+let productsPage = 1;
+let productsPageSize = 100;
+let productsTotalElements = 0;
+let productsTotalPages = 0;
+let productsData = [];
+let productsSearchTerm = '';
+let productsSearchDebounceId = null;
+let productsReqSeq = 0; // guard against out-of-order responses
+
+function productsEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function productsOnSearchInput() {
+  clearTimeout(productsSearchDebounceId);
+  productsSearchDebounceId = setTimeout(() => {
+    const v = (document.getElementById('products-search').value || '').trim();
+    productsSearchTerm = v;
+    productsFetch(1);
+  }, 300);
+}
+
+async function productsFetch(page) {
+  if (productsLoading) return;
+  productsLoading = true;
+  productsPage = page || 1;
+  const seq = ++productsReqSeq;
+  document.getElementById('products-refreshBtn').disabled = true;
+  const syncText = document.getElementById('products-syncText');
+  const body = document.getElementById('products-tableBody');
+
+  syncText.textContent = productsSearchTerm
+    ? `Searching "${productsSearchTerm}"…`
+    : `Loading page ${productsPage}…`;
+  body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Loading products…</td></tr>';
+
+  try {
+    const query = `query GetAllSKUs($p: PagingAndSorting!, $searchTerm: String, $filter: SKUFilter) {
+  getAllSKUs(pagingAndSorting: $p, searchTerm: $searchTerm, filter: $filter) {
+    size totalElements totalPages pageNumber
+    data {
+      id
+      vendorSku
+      alternativeMpn
+      status
+      skuImages
+      vendor { id name code }
+      category { id code nameSingular }
+      skuInformation { productTitle partNumber }
+    }
+  }
+}`;
+    const variables = {
+      p: {
+        pageNumber: productsPage,
+        pageSize: productsPageSize,
+        sort: [{ field: 'skuInformation.productTitle', direction: 'ASC' }]
+      },
+      searchTerm: productsSearchTerm || '',
+      filter: { excludeCategories: ['WARRANTY'] }
+    };
+
+    const res = await fetch(API_GRAPHQL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
+
+    // Drop stale responses
+    if (seq !== productsReqSeq) { productsLoading = false; return; }
+
+    const page = json.data?.getAllSKUs;
+    if (!page) throw new Error('No data returned');
+    productsData = page.data || [];
+    productsTotalElements = page.totalElements || 0;
+    productsTotalPages = page.totalPages || 0;
+    productsLoaded = true;
+    productsRender();
+
+    syncText.textContent = productsSearchTerm
+      ? `${productsTotalElements.toLocaleString()} products match "${productsSearchTerm}"`
+      : `${productsTotalElements.toLocaleString()} products in catalog`;
+  } catch (e) {
+    if (seq !== productsReqSeq) { productsLoading = false; return; }
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--red)">Error: ${productsEsc(e.message)}</td></tr>`;
+    syncText.textContent = 'Load failed';
+  } finally {
+    productsLoading = false;
+    document.getElementById('products-refreshBtn').disabled = false;
+  }
+}
+
+function productsStatusBadge(status) {
+  const s = (status || '').toUpperCase();
+  if (s === 'ACTIVE')   return `<span class="fbinv-badge fbinv-badge-deployed">Active</span>`;
+  if (s === 'INACTIVE' || s === 'ARCHIVED' || s === 'DISABLED')
+                        return `<span class="fbinv-badge fbinv-badge-returned">${productsEsc(s)}</span>`;
+  if (s === 'DRAFT' || s === 'PENDING')
+                        return `<span class="fbinv-badge fbinv-badge-pending">${productsEsc(s)}</span>`;
+  return `<span class="fbinv-badge fbinv-badge-other">${productsEsc(s || '—')}</span>`;
+}
+
+function productsRender() {
+  const body = document.getElementById('products-tableBody');
+  const rowCount = document.getElementById('products-rowCount');
+  const pageInfo = document.getElementById('products-pageInfo');
+  const tabCount = document.getElementById('tabCount-products');
+  const pagingInfo = document.getElementById('products-paging-info');
+
+  rowCount.textContent = productsData.length.toLocaleString();
+  tabCount.textContent = productsTotalElements.toLocaleString();
+
+  const startIdx = ((productsPage - 1) * productsPageSize) + 1;
+  const endIdx = Math.min(startIdx + productsData.length - 1, productsTotalElements);
+  pageInfo.textContent = productsTotalElements
+    ? `Showing ${startIdx.toLocaleString()}–${endIdx.toLocaleString()} of ${productsTotalElements.toLocaleString()}`
+    : '';
+  pagingInfo.textContent = productsTotalPages
+    ? `Page ${productsPage} of ${productsTotalPages.toLocaleString()}`
+    : '—';
+
+  if (productsData.length === 0) {
+    body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">No products match${productsSearchTerm ? ` "${productsEsc(productsSearchTerm)}"` : ''}</td></tr>`;
+  } else {
+    body.innerHTML = productsData.map(r => {
+      const title = r.skuInformation?.productTitle || '(untitled)';
+      const mpn = r.skuInformation?.partNumber || r.alternativeMpn || r.vendorSku || '—';
+      const category = r.category?.nameSingular || '—';
+      const vendor = r.vendor?.name || '—';
+      const img = (r.skuImages && r.skuImages[0]) || '';
+      const imgCell = img
+        ? `<img src="${productsEsc(img)}" alt="" style="width:40px;height:40px;object-fit:contain;border-radius:4px;background:var(--surface3);" loading="lazy" onerror="this.style.display='none'">`
+        : `<div style="width:40px;height:40px;border-radius:4px;background:var(--surface3);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;">—</div>`;
+      return `<tr>
+        <td>${imgCell}</td>
+        <td style="font-weight:500">${productsEsc(title)}</td>
+        <td style="font-family:var(--mono);font-size:12px">${productsEsc(mpn)}</td>
+        <td>${productsStatusBadge(r.status)}</td>
+        <td>${productsEsc(category)}</td>
+        <td>${productsEsc(vendor)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Pagination buttons: First, Prev, nearby pages, Next, Last
+  const btnsEl = document.getElementById('products-pg-btns');
+  const btns = [];
+  const atStart = productsPage <= 1;
+  const atEnd = productsPage >= productsTotalPages;
+  btns.push(`<button onclick="productsFetch(1)" ${atStart ? 'disabled' : ''}>«</button>`);
+  btns.push(`<button onclick="productsFetch(${productsPage - 1})" ${atStart ? 'disabled' : ''}>‹ Prev</button>`);
+  btns.push(`<button onclick="productsFetch(${productsPage + 1})" ${atEnd ? 'disabled' : ''}>Next ›</button>`);
+  btns.push(`<button onclick="productsFetch(${productsTotalPages})" ${atEnd ? 'disabled' : ''}>»</button>`);
+  btnsEl.innerHTML = btns.join('');
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
