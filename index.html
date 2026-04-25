@@ -485,8 +485,8 @@
   @keyframes ps-spin { to { transform: rotate(360deg); } }
 
   td.ps-sku-cell { font-family: var(--mono); font-size: 11px; color: var(--accent2); white-space: nowrap; }
-  td.ps-desc-cell { font-size: 12px; line-height: 1.5; color: var(--text); }
-  td.ps-mpn-cell { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+  td.ps-desc-cell { font-size: 12px; line-height: 1.5; color: var(--text); white-space: normal; word-break: break-word; min-width: 320px; width: 38%; }
+  td.ps-mpn-cell { font-family: var(--mono); font-size: 11px; color: var(--text2); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   td.ps-cat-cell { font-family: var(--mono); font-size: 11px; }
   .ps-highlight { background: rgba(61,111,255,0.2); border-radius: 2px; color: var(--accent2); padding: 0 1px; }
 
