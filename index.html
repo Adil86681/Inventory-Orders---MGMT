@@ -596,6 +596,7 @@
       <span id="syncText">Loading…</span>
     </span>
     <span id="lastUpdated" style="font-size:11px;color:var(--muted)">Never synced</span>
+    <button class="refresh-btn" id="inv-loadBtnTopbar" onclick="invLoadSelected()" disabled style="opacity:0.45;cursor:not-allowed" title="Select an org first">▶ Load</button>
     <button class="refresh-btn" onclick="manualRefresh()" title="Refresh now">↺ Refresh</button>
   </div>
 </div>
@@ -629,8 +630,16 @@
       <h1>Inventory Orders</h1>
       <p>All Warehouses (excl. SLC) — Live from API</p>
     </div>
-    <div class="page-actions">
-      <button class="btn btn-primary" onclick="invClearAll()">Clear Local</button>
+    <div class="page-actions" style="align-items:center;gap:10px">
+      <div class="ms-wrap" style="min-width:210px">
+        <button class="ms-trigger" id="inv-orgTrigger" data-all-label="Select Org…" onclick="msToggle('inv-orgMenu', this)" style="min-width:210px">Select Org…</button>
+        <div class="ms-dropdown" id="inv-orgMenu">
+          <div class="ms-search-wrap"><input class="ms-search-input" placeholder="Search orgs…" oninput="invOrgSearch(this)"></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="inv-loadBtn" onclick="invLoadSelected()" disabled style="opacity:0.45;cursor:not-allowed" title="Select at least one org to load">▶ Load</button>
+      <button class="btn btn-primary" onclick="manualRefresh()" title="Refresh loaded data">↺ Refresh</button>
+      <button class="btn btn-danger" onclick="invClearAll()">Clear Local</button>
     </div>
   </div>
 
@@ -821,7 +830,8 @@
     </div>
     <div class="page-actions">
       <span id="liveInv-syncText" style="font-size:12px;font-family:var(--mono);color:var(--muted);align-self:center;"></span>
-      <button class="btn btn-primary" onclick="liveInvFetch()" id="liveInv-refreshBtn">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="liveInvFetch()" id="liveInv-loadBtn" disabled title="Select at least one organisation to enable" style="opacity:0.45;cursor:not-allowed;">▶ Load</button>
+      <button class="btn btn-primary" onclick="liveInvFetch()" id="liveInv-refreshBtn" disabled title="Select at least one organisation to enable" style="opacity:0.45;cursor:not-allowed;">↺ Refresh</button>
     </div>
   </div>
 
@@ -837,9 +847,13 @@
       <span class="search-icon">⌕</span>
       <input type="text" id="liveInv-search" placeholder="Search by serial, ID, org, SKU, warehouse…" oninput="liveInvRender()">
     </div>
-    <select id="liveInv-orgFilter" onchange="liveInvRender()" style="min-width:200px;">
-      <option value="">All Organizations</option>
-    </select>
+    <div class="ms-wrap" id="liveInv-orgWrap" style="min-width:240px;">
+      <button class="ms-trigger" id="liveInv-orgTrigger" data-all-label="Select organisation(s)…" onclick="msToggle('liveInv-orgMenu', this)">Select organisation(s)…</button>
+      <div class="ms-dropdown" id="liveInv-orgMenu">
+        <div class="ms-search-wrap"><input type="text" class="ms-search-input" placeholder="Search orgs…" oninput="liveInvOrgSearch(this)"></div>
+        <div id="liveInv-orgMenuOptions"><label class="ms-option" style="color:var(--muted);cursor:default;">No orgs available yet — wait for orders to load…</label></div>
+      </div>
+    </div>
     <select id="liveInv-warehouseFilter" onchange="liveInvRender()" style="min-width:180px;">
       <option value="">All Warehouses</option>
     </select>
@@ -868,7 +882,7 @@
           <th>Created</th>
         </tr></thead>
         <tbody id="liveInv-tableBody">
-          <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Click Refresh, or switch to this tab to load live inventory…</td></tr>
+          <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Select one or more <strong>organisations</strong>, then click <strong>Load</strong> to fetch live inventory…</td></tr>
         </tbody>
       </table>
     </div>
@@ -886,6 +900,7 @@
     </div>
     <div class="page-actions">
       <span id="products-syncText" style="font-size:12px;font-family:var(--mono);color:var(--muted);align-self:center;"></span>
+      <button class="btn btn-primary" onclick="productsFetch()" id="products-loadBtn">▶ Load</button>
       <button class="btn btn-primary" onclick="productsFetch(true)" id="products-refreshBtn">↺ Refresh</button>
     </div>
   </div>
@@ -914,7 +929,7 @@
           <th>Vendor</th>
         </tr></thead>
         <tbody id="products-tableBody">
-          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Switch to this tab to load products…</td></tr>
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Click <strong>Load</strong> to fetch the products catalog…</td></tr>
         </tbody>
       </table>
     </div>
@@ -1071,7 +1086,8 @@ function startRefreshCountdown() {
 }
 
 function manualRefresh() {
-  invFetchFromAPI();
+  const _orgs = [...document.querySelectorAll('#inv-orgMenu input:checked')];
+  if (_orgs.length > 0) invFetchFromAPI();
   csFetchFromAPI();
 }
 
@@ -1197,6 +1213,11 @@ async function invFetchFromAPI() {
 
       if (isBlockedWarehouse(wh)) return;
 
+      // Track org name → id for the live-inventory tab picker
+      if (order.organization?.name && order.organization?.id) {
+        invOrgIdMap[order.organization.name] = order.organization.id;
+      }
+
       const items = (order.inventoryOrderItems || []).map(item => ({
         order_item_id: item.id || '',
         brand: item.sku?.vendor?.name || '',
@@ -1268,10 +1289,17 @@ async function invFetchFromAPI() {
       }
     });
 
+    // Filter to selected orgs
+    const _selOrgs = new Set([...document.querySelectorAll('#inv-orgMenu input:checked')].map(c => c.value));
+    if (_selOrgs.size > 0) {
+      Object.keys(invOrders).forEach(fid => { if (!_selOrgs.has(invOrders[fid].organization)) delete invOrders[fid]; });
+    }
+    invPopulateOrgPicker();
     invSaveState();
     updateLastUpdated();
     setSyncStatus('ok', 'Synced');
     invRenderAll();
+    if (typeof liveInvPopulateOrgPicker === 'function') liveInvPopulateOrgPicker();
     startRefreshCountdown();
   } catch(err) {
     setSyncStatus('error', 'API error — see console');
@@ -1325,6 +1353,63 @@ function invCopyItemSku(sku, btn) {
 function invToggleExpand(fid) {
   if (invExpanded.has(fid)) invExpanded.delete(fid); else invExpanded.add(fid);
   invRenderTable();
+}
+
+
+// ─── INV ORG PICKER ────────────────────────────────────────────────────────────────────────────
+function invPopulateOrgPicker() {
+  const orgs = [...new Set(Object.values(invOrders).map(o => o.organization).filter(Boolean))].sort();
+  const menu = document.getElementById('inv-orgMenu');
+  if (!menu) return;
+  const prev = new Set([...menu.querySelectorAll('input:checked')].map(c => c.value));
+  [...menu.querySelectorAll('.ms-option, .inv-org-empty')].forEach(el => el.remove());
+  if (orgs.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'inv-org-empty';
+    empty.style.cssText = 'padding:8px 14px;font-size:12px;color:var(--muted);font-style:italic';
+    empty.textContent = 'No cached orgs yet — will populate after first load';
+    menu.appendChild(empty);
+  } else {
+    orgs.forEach(o => {
+      const esc = o.replace(/"/g, '&quot;');
+      const checked = prev.has(o);
+      const label = document.createElement('label');
+      label.className = 'ms-option' + (checked ? ' checked' : '');
+      label.innerHTML = `<input type="checkbox" value="${esc}" ${checked?'checked':''} onchange="invOrgChange()"> ${o}`;
+      menu.appendChild(label);
+    });
+  }
+  wireMsCheckboxes(menu);
+  invOrgChange();
+}
+
+function invOrgSearch(input) {
+  const q = input.value.toLowerCase();
+  document.querySelectorAll('#inv-orgMenu .ms-option').forEach(opt => {
+    opt.classList.toggle('hidden', q.length > 0 && !opt.textContent.toLowerCase().includes(q));
+  });
+}
+
+function invOrgChange() {
+  const selected = [...document.querySelectorAll('#inv-orgMenu input:checked')];
+  const enabled = selected.length > 0;
+  ['inv-loadBtn', 'inv-loadBtnTopbar'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = !enabled;
+    btn.style.opacity = enabled ? '1' : '0.45';
+    btn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+    btn.title = enabled ? `Load ${selected.length} org(s)` : 'Select at least one org to load';
+  });
+  const trigger = document.getElementById('inv-orgTrigger');
+  const menu = document.getElementById('inv-orgMenu');
+  if (trigger && menu) msUpdateLabel(menu, trigger, 'Select Org…');
+}
+
+function invLoadSelected() {
+  const selected = [...document.querySelectorAll('#inv-orgMenu input:checked')];
+  if (selected.length === 0) { showToast('Select at least one org first'); return; }
+  invFetchFromAPI();
 }
 
 function invUpdateFilters() {
@@ -1584,6 +1669,11 @@ async function csFetchFromAPI() {
       const wh = order.warehouse?.name || '';
       if (isBlockedWarehouse(wh)) return;
 
+      // Track org name → id for the live-inventory tab picker
+      if (order.organization?.name && order.organization?.id) {
+        invOrgIdMap[order.organization.name] = order.organization.id;
+      }
+
       const items = (order.shipmentNoticeOrderItems || []).map(item => ({
         order_item_id: item.id || '',
         brand: item.sku?.vendor?.name || '',
@@ -1634,6 +1724,7 @@ async function csFetchFromAPI() {
 
     csSaveState();
     csRenderAll();
+    if (typeof liveInvPopulateOrgPicker === 'function') liveInvPopulateOrgPicker();
   } catch(err) {
     console.error('CS API fetch error:', err);
   }
@@ -2317,13 +2408,8 @@ function switchTab(tab) {
   if (tab === 'adil') {
     adilLoadFrame();
   }
-  if (tab === 'liveInv' && !liveInvLoaded && !liveInvLoading) {
-    liveInvFetch();
-  }
-  if (tab === 'products' && !productsLoaded && !productsLoading) {
-    productsFetch();
-  }
-  // fbinv tab is upload-driven — no auto-load needed
+  // Inventory + Products tabs are load-on-demand — user clicks "Load" or "Refresh".
+  // fbinv tab is upload-driven — no auto-load needed.
 }
 
 // ─── ADIL'S DASHBOARD (embedded via iframe srcdoc) ────────────────────────────
@@ -2388,6 +2474,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   wireMsCheckboxes(document.getElementById('inv-statusMenu'));
   wireMsCheckboxes(document.getElementById('cs-statusMenu'));
+  // Initialise the live-inventory org picker (will show "no orgs yet" until orders load)
+  if (typeof liveInvPopulateOrgPicker === 'function') liveInvPopulateOrgPicker();
 });
 
 function wireMsCheckboxes(menu) {
@@ -3139,6 +3227,87 @@ function fbinvRender() {
 let liveInvData = [];
 let liveInvLoaded = false;
 let liveInvLoading = false;
+let invOrgIdMap = {}; // org name → org id, populated as inventory orders & live inventory load
+
+// Populate / refresh the multi-select org picker for the Live Inventory tab.
+// Sources orgs from already-loaded inventory orders + customer supplied orders +
+// any liveInvData we've already pulled.
+function liveInvPopulateOrgPicker() {
+  const menuOptions = document.getElementById('liveInv-orgMenuOptions');
+  if (!menuOptions) return;
+  const orgSet = new Set();
+  if (typeof invOrders === 'object' && invOrders) {
+    Object.values(invOrders).forEach(o => { if (o.organization) orgSet.add(o.organization); });
+  }
+  if (typeof csOrders === 'object' && csOrders) {
+    Object.values(csOrders).forEach(o => { if (o.organization) orgSet.add(o.organization); });
+  }
+  (liveInvData || []).forEach(r => { if (r.organization?.name) orgSet.add(r.organization.name); });
+  const orgs = [...orgSet].sort();
+  if (!orgs.length) {
+    menuOptions.innerHTML = '<label class="ms-option" style="color:var(--muted);cursor:default;">No orgs available yet — wait for orders to load…</label>';
+    liveInvUpdateLoadBtnState();
+    return;
+  }
+  // Preserve current selections
+  const prev = new Set(liveInvSelectedOrgs());
+  menuOptions.innerHTML = orgs.map(v => {
+    const safe = v.replace(/"/g,'&quot;');
+    const checked = prev.has(v);
+    return `<label class="ms-option ${checked?'checked':''}"><input type="checkbox" value="${safe}" ${checked?'checked':''} onchange="liveInvOnOrgChange(this)"> ${liveInvEsc(v)}</label>`;
+  }).join('');
+  liveInvUpdateOrgLabel();
+  liveInvUpdateLoadBtnState();
+}
+
+function liveInvOnOrgChange(cb) {
+  cb.closest('.ms-option').classList.toggle('checked', cb.checked);
+  liveInvUpdateOrgLabel();
+  liveInvUpdateLoadBtnState();
+  if (liveInvLoaded) liveInvRender();
+}
+
+function liveInvSelectedOrgs() {
+  return [...document.querySelectorAll('#liveInv-orgMenuOptions input:checked')].map(c => c.value);
+}
+
+function liveInvUpdateOrgLabel() {
+  const trigger = document.getElementById('liveInv-orgTrigger');
+  const checked = [...document.querySelectorAll('#liveInv-orgMenuOptions input:checked')];
+  trigger.innerHTML = '';
+  if (checked.length === 0) { trigger.textContent = 'Select organisation(s)…'; return; }
+  checked.slice(0,2).forEach(c => {
+    const chip = document.createElement('span'); chip.className = 'ms-chip';
+    chip.textContent = c.closest('.ms-option').textContent.trim();
+    trigger.appendChild(chip);
+  });
+  if (checked.length > 2) {
+    const more = document.createElement('span'); more.className = 'ms-chip';
+    more.textContent = `+${checked.length-2}`; trigger.appendChild(more);
+  }
+}
+
+function liveInvUpdateLoadBtnState() {
+  const hasOrgs = liveInvSelectedOrgs().length > 0;
+  const loadBtn = document.getElementById('liveInv-loadBtn');
+  const refreshBtn = document.getElementById('liveInv-refreshBtn');
+  [loadBtn, refreshBtn].forEach(b => {
+    if (!b) return;
+    if (liveInvLoading) return; // don't override loading-state disable
+    b.disabled = !hasOrgs;
+    b.style.opacity = hasOrgs ? '' : '0.45';
+    b.style.cursor = hasOrgs ? '' : 'not-allowed';
+    b.title = hasOrgs ? '' : 'Select at least one organisation to enable';
+  });
+}
+
+function liveInvOrgSearch(input) {
+  const q = (input.value || '').toLowerCase().trim();
+  document.querySelectorAll('#liveInv-orgMenuOptions .ms-option').forEach(opt => {
+    const text = opt.textContent.toLowerCase();
+    opt.classList.toggle('hidden', q && !text.includes(q));
+  });
+}
 
 // Prettified status labels
 const LIVE_INV_STATUS_LABEL = {
@@ -3165,22 +3334,49 @@ function liveInvEsc(s) {
 
 async function liveInvFetch() {
   if (liveInvLoading) return;
+  const selectedOrgs = liveInvSelectedOrgs();
+  if (!selectedOrgs.length) {
+    alert('Please select at least one organisation before loading.');
+    return;
+  }
   liveInvLoading = true;
-  document.getElementById('liveInv-refreshBtn').disabled = true;
+  const loadBtn = document.getElementById('liveInv-loadBtn');
+  const refreshBtn = document.getElementById('liveInv-refreshBtn');
+  if (loadBtn) loadBtn.disabled = true;
+  if (refreshBtn) refreshBtn.disabled = true;
   const syncText = document.getElementById('liveInv-syncText');
   const body = document.getElementById('liveInv-tableBody');
   body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted)">Fetching inventory from Firstbase…</td></tr>';
 
+  // Resolve selected orgs to ids (where known) so we can filter server-side
+  const selectedSet = new Set(selectedOrgs);
+  const orgIds = selectedOrgs.map(n => invOrgIdMap[n]).filter(Boolean);
+  const haveAllIds = orgIds.length === selectedOrgs.length;
+
   try {
     const all = [];
-    const pageSize = 100;
-    const MAX_PAGES = 30; // safety cap → up to 3,000 rows
+    const pageSize = 200;
     let pageNumber = 1;
     let totalElements = 0;
     let totalPages = 0;
+    let serverFilterActive = haveAllIds;
+    let serverFilterTried = false;
 
-    while (pageNumber <= MAX_PAGES) {
-      const query = `query GetAllInventories($paging: PagingAndSorting!) {
+    while (true) {
+      // Try server-side filter first (organizationIds). If the API rejects the
+      // filter shape, fall back to no-filter and rely on client-side filtering.
+      const queryWithFilter = `query GetAllInventories($paging: PagingAndSorting!, $filter: InventoryFilter) {
+  getAllInventories(pagingAndSorting: $paging, filter: $filter) {
+    totalElements totalPages pageNumber size
+    data {
+      id serialNumber active conditionStatus deployStatus createdAt
+      organization { id name }
+      sku { id vendorSku }
+      warehouse { id name }
+    }
+  }
+}`;
+      const queryNoFilter = `query GetAllInventories($paging: PagingAndSorting!) {
   getAllInventories(pagingAndSorting: $paging) {
     totalElements totalPages pageNumber size
     data {
@@ -3191,28 +3387,52 @@ async function liveInvFetch() {
     }
   }
 }`;
-      const variables = {
-        paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] }
-      };
 
-      syncText.textContent = `Loading page ${pageNumber}${totalPages ? '/' + Math.min(totalPages, MAX_PAGES) : ''}…`;
+      const useServerFilter = serverFilterActive;
+      const variables = useServerFilter
+        ? {
+            paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] },
+            filter: { organizationIds: orgIds }
+          }
+        : {
+            paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] }
+          };
+
+      syncText.textContent = `Loading page ${pageNumber}${totalPages ? '/' + totalPages : ''}… (${all.length.toLocaleString()} rows so far)`;
 
       const res = await fetch(API_GRAPHQL_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables })
+        body: JSON.stringify({ query: useServerFilter ? queryWithFilter : queryNoFilter, variables })
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
+
+      // If the server-filter shape is rejected, fall back gracefully on the FIRST page.
+      if (json.errors && useServerFilter && !serverFilterTried) {
+        console.warn('Server-side org filter not accepted, falling back to client-side filter:', json.errors);
+        serverFilterActive = false;
+        serverFilterTried = true;
+        continue; // retry same page without filter
+      }
       if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
 
       const page = json.data?.getAllInventories;
       if (!page) throw new Error('No data returned');
-      all.push(...(page.data || []));
+
+      // Capture org-ids from anything we see (helps future loads use server filter)
+      (page.data || []).forEach(r => {
+        if (r.organization?.name && r.organization?.id) invOrgIdMap[r.organization.name] = r.organization.id;
+      });
+
+      // Client-side filter by selected orgs (works as backup AND when server-filter is on)
+      const kept = (page.data || []).filter(r => selectedSet.has(r.organization?.name || ''));
+      all.push(...kept);
+
       totalElements = page.totalElements || 0;
       totalPages = page.totalPages || 0;
 
-      if (pageNumber >= totalPages) break;
+      if (pageNumber >= totalPages || totalPages === 0) break;
       pageNumber++;
     }
 
@@ -3224,50 +3444,46 @@ async function liveInvFetch() {
     liveInvPopulateFilters();
     liveInvRender();
 
-    const capped = (pageNumber > MAX_PAGES) && (totalPages > MAX_PAGES);
-    syncText.textContent = `Loaded ${filtered.length.toLocaleString()} rows (${all.length.toLocaleString()} before SLC filter${capped ? `, capped at ${MAX_PAGES * pageSize}/${totalElements.toLocaleString()} total` : ''})`;
+    syncText.textContent = `Loaded ${filtered.length.toLocaleString()} rows for ${selectedOrgs.length} org${selectedOrgs.length===1?'':'s'} (${serverFilterActive ? 'server-filtered' : 'client-filtered'})`;
   } catch (e) {
     body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--red)">Error: ${liveInvEsc(e.message)}</td></tr>`;
     syncText.textContent = 'Load failed';
   } finally {
     liveInvLoading = false;
-    document.getElementById('liveInv-refreshBtn').disabled = false;
+    liveInvUpdateLoadBtnState();
   }
 }
 
 function liveInvPopulateFilters() {
-  // Preserve current selections if still valid
-  const orgSel = document.getElementById('liveInv-orgFilter');
+  // Org picker is its own multi-select — refresh from the new data
+  liveInvPopulateOrgPicker();
+
+  // Preserve current selections if still valid for warehouse/status
   const warehouseSel = document.getElementById('liveInv-warehouseFilter');
   const statusSel = document.getElementById('liveInv-statusFilter');
-  const prevOrg = orgSel.value;
   const prevWarehouse = warehouseSel.value;
   const prevStatus = statusSel.value;
 
-  const orgs = [...new Set(liveInvData.map(r => r.organization?.name).filter(Boolean))].sort();
   const warehouses = [...new Set(liveInvData.map(r => r.warehouse?.name).filter(Boolean))].sort();
   const statuses = [...new Set(liveInvData.map(r => r.deployStatus).filter(Boolean))].sort();
 
-  orgSel.innerHTML = '<option value="">All Organizations</option>' +
-    orgs.map(o => `<option value="${liveInvEsc(o)}">${liveInvEsc(o)}</option>`).join('');
   warehouseSel.innerHTML = '<option value="">All Warehouses</option>' +
     warehouses.map(w => `<option value="${liveInvEsc(w)}">${liveInvEsc(whLabel(w))}</option>`).join('');
   statusSel.innerHTML = '<option value="">All Statuses</option>' +
     statuses.map(s => `<option value="${liveInvEsc(s)}">${liveInvEsc(LIVE_INV_STATUS_LABEL[s] || s)}</option>`).join('');
 
-  if (orgs.includes(prevOrg)) orgSel.value = prevOrg;
   if (warehouses.includes(prevWarehouse)) warehouseSel.value = prevWarehouse;
   if (statuses.includes(prevStatus)) statusSel.value = prevStatus;
 }
 
 function liveInvRender() {
   const search = (document.getElementById('liveInv-search').value || '').toLowerCase().trim();
-  const orgF = document.getElementById('liveInv-orgFilter').value;
+  const selectedOrgs = new Set(liveInvSelectedOrgs());
   const warehouseF = document.getElementById('liveInv-warehouseFilter').value;
   const statusF = document.getElementById('liveInv-statusFilter').value;
 
   let rows = liveInvData;
-  if (orgF) rows = rows.filter(r => r.organization?.name === orgF);
+  if (selectedOrgs.size) rows = rows.filter(r => selectedOrgs.has(r.organization?.name || ''));
   if (warehouseF) rows = rows.filter(r => r.warehouse?.name === warehouseF);
   if (statusF) rows = rows.filter(r => r.deployStatus === statusF);
   if (search) {
@@ -3291,10 +3507,8 @@ function liveInvRender() {
   document.getElementById('tabCount-liveInv').textContent = rows.length.toLocaleString();
   document.getElementById('liveInv-rowCount').textContent = rows.length.toLocaleString();
 
-  // Cap rendered rows for perf; paging can be added later
-  const RENDER_CAP = 1000;
-  document.getElementById('liveInv-pageInfo').textContent =
-    rows.length > RENDER_CAP ? `Showing first ${RENDER_CAP.toLocaleString()} of ${rows.length.toLocaleString()}` : '';
+  // No render cap — render every matched row.
+  document.getElementById('liveInv-pageInfo').textContent = '';
 
   const body = document.getElementById('liveInv-tableBody');
   if (rows.length === 0) {
@@ -3302,7 +3516,7 @@ function liveInvRender() {
     return;
   }
 
-  body.innerHTML = rows.slice(0, RENDER_CAP).map(r => {
+  body.innerHTML = rows.map(r => {
     const stCls = liveInvStatusClass(r.deployStatus);
     const stLabel = LIVE_INV_STATUS_LABEL[r.deployStatus] || r.deployStatus || '—';
     const shortId = (r.id || '').substring(0, 8);
@@ -3388,6 +3602,8 @@ async function productsFetch(forceReload) {
   productsAllData = [];
   productsLoadingProgress = 0;
   document.getElementById('products-refreshBtn').disabled = true;
+  const productsLoadBtn = document.getElementById('products-loadBtn');
+  if (productsLoadBtn) productsLoadBtn.disabled = true;
   const syncText = document.getElementById('products-syncText');
   const body = document.getElementById('products-tableBody');
 
@@ -3460,6 +3676,8 @@ async function productsFetch(forceReload) {
   } finally {
     productsLoading = false;
     document.getElementById('products-refreshBtn').disabled = false;
+    const pb = document.getElementById('products-loadBtn');
+    if (pb) pb.disabled = false;
   }
 }
 
@@ -3529,7 +3747,7 @@ function productsRender() {
         : '';
       return `<tr>
         <td>${imgCell}</td>
-        <td><div style="max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500" title="${productsEsc(title)}">${productsEsc(title)}</div></td>
+        <td style="vertical-align:top"><div style="max-width:340px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.4;font-weight:500" title="${productsEsc(title)}">${productsEsc(title)}</div></td>
         <td style="white-space:nowrap"><span style="font-family:var(--mono);font-size:11px">${productsEsc(id)}</span>${copyBtn}</td>
         <td style="font-family:var(--mono);font-size:12px">${productsEsc(mpn)}</td>
         <td>${productsStatusBadge(r.status)}</td>
@@ -3599,11 +3817,11 @@ function productsCopyFallback(text) {
 invLoadState();
 csLoadState();
 commentsLoad();
+invPopulateOrgPicker();
 invRenderAll();
 csRenderAll();
 
-setSyncStatus('syncing', 'Loading from API…');
-invFetchFromAPI();
+setSyncStatus('offline', 'Select an org and click Load');
 csFetchFromAPI();
 </script>
 </body>
