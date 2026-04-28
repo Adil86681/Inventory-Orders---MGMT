@@ -637,8 +637,6 @@
           <div class="ms-search-wrap"><input class="ms-search-input" placeholder="Search orgs…" oninput="invOrgSearch(this)"></div>
         </div>
       </div>
-      <button class="btn btn-primary" id="inv-loadBtn" onclick="invLoadSelected()" disabled style="opacity:0.45;cursor:not-allowed" title="Select at least one org to load">▶ Load</button>
-      <button class="btn btn-primary" onclick="manualRefresh()" title="Refresh loaded data">↺ Refresh</button>
       <button class="btn btn-danger" onclick="invClearAll()">Clear Local</button>
     </div>
   </div>
@@ -1394,7 +1392,7 @@ function invOrgSearch(input) {
 function invOrgChange() {
   const selected = [...document.querySelectorAll('#inv-orgMenu input:checked')];
   const enabled = selected.length > 0;
-  ['inv-loadBtn', 'inv-loadBtnTopbar'].forEach(id => {
+  ['inv-loadBtnTopbar'].forEach(id => {
     const btn = document.getElementById(id);
     if (!btn) return;
     btn.disabled = !enabled;
@@ -1408,8 +1406,6 @@ function invOrgChange() {
 }
 
 function invLoadSelected() {
-  const selected = [...document.querySelectorAll('#inv-orgMenu input:checked')];
-  if (selected.length === 0) { showToast('Select at least one org first'); return; }
   invFetchFromAPI();
 }
 
@@ -3824,7 +3820,8 @@ invPopulateOrgPicker();
 invRenderAll();
 csRenderAll();
 
-setSyncStatus('offline', 'Select an org and click Load');
+setSyncStatus('syncing', 'Loading from API…');
+invFetchFromAPI();
 csFetchFromAPI();
 </script>
 </body>
