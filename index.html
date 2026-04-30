@@ -1252,6 +1252,9 @@ function kpiProcessOrders(allOrders) {
   if (events.length === 0) {
     kpiSaveSnapshot(stagedSnapshot);
     kpiSetStatus('idle', `KPI: tracking ${Object.keys(stagedSnapshot).length}`);
+    // Still run backstop — it operates on a different data set (COMPLETED orders)
+    // so there may be completions to record even when the main poll had no events.
+    kpiFetchCompletedBackstop();
     return;
   }
 
@@ -1264,7 +1267,119 @@ function kpiProcessOrders(allOrders) {
       // Don't persist staged snapshot — let next poll re-detect and retry.
       kpiSetStatus('error', 'KPI: write failed');
     }
+    // Chain backstop after the main POST resolves so the two don't race
+    // on the snapshot. Backstop reads its own fresh snapshot.
+    kpiFetchCompletedBackstop();
   });
+}
+
+// Backstop — fetches recently-completed orders directly from the API and
+// records any whose completion we missed (overnight, or before this browser
+// session started). Uses order.updatedAt as the completion timestamp because
+// that's when the server flipped the status to COMPLETED.
+async function kpiFetchCompletedBackstop() {
+  if (!KPI_TRACKER_URL) return;
+
+  try {
+    const query = `query GetCompletedOrders($paging: PagingAndSorting!, $filter: InventoryOrderFilter) {
+  getInventoryOrdersPaginated(pagingAndSorting: $paging, filter: $filter) {
+    data {
+      id
+      friendlyOrderId
+      status
+      createdAt
+      updatedAt
+      organization { id name }
+      warehouse { id name }
+      submittedBy { forename surname email }
+      inventoryOrderItems {
+        quantity
+        sku { skuInformation { productTitle } }
+      }
+    }
+    totalElements
+  }
+}`;
+
+    const res = await fetch(API_GRAPHQL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        variables: {
+          paging: { pageNumber: 1, pageSize: 250, sort: [{ field: 'updatedAt', direction: 'DESC' }] },
+          filter: { statuses: ['COMPLETED'], firstbaseSupplied: true }
+        }
+      })
+    });
+
+    if (!res.ok) { console.warn('KPI backstop HTTP', res.status); return; }
+    const json = await res.json();
+    if (json.errors) { console.error('KPI backstop GraphQL errors:', json.errors); return; }
+
+    const completed = json.data?.getInventoryOrdersPaginated?.data || [];
+    if (completed.length === 0) return;
+
+    const snapshot = kpiLoadSnapshot();
+    const stagedSnapshot = JSON.parse(JSON.stringify(snapshot));
+    const events = [];
+
+    completed.forEach(order => {
+      const fid = order.friendlyOrderId || order.id;
+      const wh = order.warehouse?.name || '';
+      if (isBlockedWarehouse(wh)) return;
+
+      const items = order.inventoryOrderItems || [];
+      const meta = kpiBuildMeta(order, items);
+
+      const prev = stagedSnapshot[fid] || {
+        hasOrdered: false, hasShipped: false, hasAtFacility: false, hasCompleted: false
+      };
+
+      // Order completed before we ever saw it. Record what we can: ordered_at
+      // from createdAt, completed_at from updatedAt. Mark intermediate stages
+      // as "passed" with no timestamp so they aren't re-emitted later.
+      if (!prev.hasOrdered) {
+        events.push({
+          friendly_order_id: fid,
+          transition: 'ordered',
+          timestamp: order.createdAt || new Date().toISOString(),
+          ...meta
+        });
+        prev.hasOrdered = true;
+        prev.hasShipped = true;       // suppress — we don't know when shipped
+        prev.hasAtFacility = true;    // suppress — we don't know when arrived
+      }
+
+      // Completion timestamp from the API itself — this is the authoritative
+      // moment the server marked the order COMPLETED.
+      if (!prev.hasCompleted) {
+        events.push({
+          friendly_order_id: fid,
+          transition: 'completed',
+          timestamp: order.updatedAt || new Date().toISOString(),
+          ...meta
+        });
+        prev.hasCompleted = true;
+      }
+
+      stagedSnapshot[fid] = prev;
+    });
+
+    if (events.length === 0) return;
+
+    kpiSetStatus('syncing', `KPI: backstop sending ${events.length}`);
+    const ok = await kpiSendEvents(events);
+    if (ok) {
+      kpiSaveSnapshot(stagedSnapshot);
+      kpiSetStatus('ok', `KPI: backstop logged ${events.length}`);
+    } else {
+      kpiSetStatus('error', 'KPI: backstop write failed');
+    }
+  } catch (err) {
+    console.error('KPI backstop error:', err);
+    kpiSetStatus('error', 'KPI: backstop error');
+  }
 }
 
 // ─── INVENTORY ORDERS FROM GRAPHQL ───────────────────────────────────────────
