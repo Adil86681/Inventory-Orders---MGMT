@@ -1,5 +1,8 @@
 {
-  "rewrites": [
-    { "source": "/api/graphql", "destination": "/api/graphql" }
+  "crons": [
+    {
+      "path": "/api/kpi-sync",
+      "schedule": "*/5 * * * *"
+    }
   ]
 }
