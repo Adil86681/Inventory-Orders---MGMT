@@ -595,6 +595,10 @@
       <span id="syncDot" style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>
       <span id="syncText">Loading…</span>
     </span>
+    <span id="kpiStatus" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)" title="KPI Tracker — pushes order lifecycle transitions to Google Sheets">
+      <span id="kpiDot" style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>
+      <span id="kpiText">KPI: idle</span>
+    </span>
     <span id="lastUpdated" style="font-size:11px;color:var(--muted)">Never synced</span>
     <button class="refresh-btn" id="inv-loadBtnTopbar" onclick="invLoadSelected()" disabled style="opacity:0.45;cursor:not-allowed" title="Select an org first">▶ Load</button>
     <button class="refresh-btn" onclick="manualRefresh()" title="Refresh now">↺ Refresh</button>
@@ -1047,6 +1051,11 @@ const API_GRAPHQL_URL = '/api/graphql';  // Proxied through Node.js server (hand
 const MGMT_SHEET_ID   = '1iN9TeaadP4UPqOUrvUKRRkD4-CK3CLNncYQ-Xl2ohck';
 const SKU_CATALOG_GID = '1220759584';
 
+// KPI tracker — Apps Script web app deployed against MGMT_SHEET_ID. Receives
+// transition events (ordered/shipped/at_facility/completed) and writes
+// timestamps to the KPI_Tracker tab. See KPI_Tracker_AppsScript.gs.
+const KPI_TRACKER_URL = 'https://script.google.com/macros/s/AKfycbxyST8dafoimwK8toJM9tN5nuQOeLozktvgUFqLb8djX8WbWp5Swr4ECzBX-RHIVQuAYQ/exec';
+
 // ─── SYNC STATE ──────────────────────────────────────────────────────────────
 let refreshCountdown = 60;
 let refreshTimer = null;
@@ -1087,6 +1096,175 @@ function manualRefresh() {
   const _orgs = [...document.querySelectorAll('#inv-orgMenu input:checked')];
   if (_orgs.length > 0) invFetchFromAPI();
   csFetchFromAPI();
+}
+
+// ─── KPI TRANSITION TRACKER ──────────────────────────────────────────────────
+// Watches the API responses, detects status transitions per order, and POSTs
+// transition events to the Google Apps Script web app, which timestamps them
+// in the KPI_Tracker sheet tab.
+//
+// Stages we track: ordered -> shipped -> at_facility -> completed
+//   ordered     = first time we observe an order. timestamp = order.createdAt
+//   shipped     = order.status flips to SHIPPED. timestamp = order.updatedAt
+//   at_facility = any item is ARRIVED_AT_PROCESSING_FACILITY. timestamp = now
+//   completed   = order disappeared from the API (was past SHIPPED). timestamp = now
+//
+// Snapshot is kept in localStorage so transitions are detected across reloads.
+
+const KPI_SNAPSHOT_KEY = 'kpi_tracker_snapshot_v1';
+
+function kpiLoadSnapshot() {
+  try { const s = localStorage.getItem(KPI_SNAPSHOT_KEY); return s ? JSON.parse(s) : {}; }
+  catch(e) { return {}; }
+}
+function kpiSaveSnapshot(snap) {
+  try { localStorage.setItem(KPI_SNAPSHOT_KEY, JSON.stringify(snap)); } catch(e) {}
+}
+
+function kpiSetStatus(state, text) {
+  const dot = document.getElementById('kpiDot');
+  const txt = document.getElementById('kpiText');
+  const colors = { idle:'var(--muted)', ok:'var(--green)', syncing:'var(--amber)', error:'var(--red)' };
+  if (dot) dot.style.background = colors[state] || colors.idle;
+  if (txt) txt.textContent = text;
+}
+
+// Apps Script doPost can't reply to a CORS preflight, so we send as text/plain
+// (a "simple" Content-Type that skips the OPTIONS check). The body is still
+// JSON; the Apps Script JSON.parses it the same way.
+function kpiSendEvents(events) {
+  return fetch(KPI_TRACKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ events })
+  })
+  .then(res => res.json())
+  .then(json => {
+    if (json && json.ok) return true;
+    console.error('KPI write failed:', json);
+    return false;
+  })
+  .catch(err => { console.error('KPI network error:', err); return false; });
+}
+
+function kpiBuildMeta(order, items) {
+  const wh = order.warehouse?.name || '';
+  return {
+    inventory_order_id: order.id || '',
+    organization: order.organization?.name || '',
+    warehouse: wh,
+    product_title: items.length === 1
+      ? (items[0].sku?.skuInformation?.productTitle || '')
+      : `${items.length} items`,
+    total_qty: items.reduce((s, it) => s + (it.quantity || 0), 0),
+    submitted_by: order.submittedBy
+      ? `${order.submittedBy.forename || ''} ${order.submittedBy.surname || ''}`.trim()
+      : ''
+  };
+}
+
+// Called from invFetchFromAPI on the unfiltered allOrders list, before the
+// org-picker filter is applied. Diffs against snapshot, sends new transitions.
+function kpiProcessOrders(allOrders) {
+  if (!KPI_TRACKER_URL) return;
+
+  const snapshot = kpiLoadSnapshot();
+  const stagedSnapshot = JSON.parse(JSON.stringify(snapshot));
+  const events = [];
+  const seenFids = new Set();
+
+  allOrders.forEach(order => {
+    const fid = order.friendlyOrderId || order.id;
+    const wh = order.warehouse?.name || '';
+    if (isBlockedWarehouse(wh)) return;
+    seenFids.add(fid);
+
+    const items = order.inventoryOrderItems || [];
+    const itemStatuses = items.map(it => it.status).filter(Boolean);
+    const orderStatus = order.status || '';
+    const meta = kpiBuildMeta(order, items);
+
+    const isFirstSight = !stagedSnapshot[fid];
+    const prev = stagedSnapshot[fid] || {
+      hasOrdered: false, hasShipped: false, hasAtFacility: false, hasCompleted: false
+    };
+
+    // ordered — first time seen. createdAt is always known and accurate.
+    if (!prev.hasOrdered) {
+      events.push({
+        friendly_order_id: fid,
+        transition: 'ordered',
+        timestamp: order.createdAt || new Date().toISOString(),
+        ...meta
+      });
+      prev.hasOrdered = true;
+    }
+
+    if (isFirstSight) {
+      // Order is being observed mid-lifecycle. We don't know when prior
+      // transitions happened, so silently mark them "passed" without emitting
+      // events. This keeps KPI data clean — only orders we observe end-to-end
+      // contribute to the SLO calculation. Older orders get partial data.
+      if (orderStatus === 'SHIPPED') prev.hasShipped = true;
+      if (itemStatuses.includes('ARRIVED_AT_PROCESSING_FACILITY')) prev.hasAtFacility = true;
+    } else {
+      // shipped — witnessed status flip
+      if (!prev.hasShipped && orderStatus === 'SHIPPED') {
+        events.push({
+          friendly_order_id: fid,
+          transition: 'shipped',
+          timestamp: new Date().toISOString(),
+          ...meta
+        });
+        prev.hasShipped = true;
+      }
+
+      // at_facility — witnessed item-level transition
+      if (!prev.hasAtFacility && itemStatuses.includes('ARRIVED_AT_PROCESSING_FACILITY')) {
+        events.push({
+          friendly_order_id: fid,
+          transition: 'at_facility',
+          timestamp: new Date().toISOString(),
+          ...meta
+        });
+        prev.hasAtFacility = true;
+      }
+    }
+
+    prev.lastStatus = orderStatus;
+    stagedSnapshot[fid] = prev;
+  });
+
+  // completed by absence — order was previously seen past SHIPPED, now gone
+  Object.keys(stagedSnapshot).forEach(fid => {
+    if (seenFids.has(fid)) return;
+    const prev = stagedSnapshot[fid];
+    if (prev.hasCompleted) return;
+    if (!prev.hasShipped && !prev.hasAtFacility) return; // never progressed; don't claim completion
+    events.push({
+      friendly_order_id: fid,
+      transition: 'completed',
+      timestamp: new Date().toISOString()
+    });
+    prev.hasCompleted = true;
+  });
+
+  if (events.length === 0) {
+    kpiSaveSnapshot(stagedSnapshot);
+    kpiSetStatus('idle', `KPI: tracking ${Object.keys(stagedSnapshot).length}`);
+    return;
+  }
+
+  kpiSetStatus('syncing', `KPI: sending ${events.length}`);
+  kpiSendEvents(events).then(ok => {
+    if (ok) {
+      kpiSaveSnapshot(stagedSnapshot);
+      kpiSetStatus('ok', `KPI: logged ${events.length}`);
+    } else {
+      // Don't persist staged snapshot — let next poll re-detect and retry.
+      kpiSetStatus('error', 'KPI: write failed');
+    }
+  });
 }
 
 // ─── INVENTORY ORDERS FROM GRAPHQL ───────────────────────────────────────────
@@ -1287,6 +1465,11 @@ async function invFetchFromAPI() {
         invOrders[fid].sku_id = '';
       }
     });
+
+    // KPI tracker — diff allOrders against snapshot and emit transition events
+    // BEFORE the org-picker filter runs (we want lifecycle data for every order,
+    // regardless of which org the user is viewing).
+    try { kpiProcessOrders(allOrders); } catch (e) { console.error('KPI tracker error:', e); }
 
     // Filter to selected orgs
     const _selOrgs = new Set([...document.querySelectorAll('#inv-orgMenu input:checked')].map(c => c.value));
