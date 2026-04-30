@@ -655,7 +655,33 @@
   font-size: 11px; font-family: var(--mono);
   background: var(--surface2); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 8px; color: var(--text2);
+  position: relative; cursor: default;
 }
+.kpi-pipeline-wh-chip:hover { border-color: var(--accent); color: var(--accent2); background: rgba(61,111,255,0.08); }
+.kpi-wh-tooltip {
+  display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 8px 12px; min-width: 220px; max-width: 320px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.13); z-index: 9999;
+  pointer-events: none;
+}
+.kpi-wh-tooltip::after {
+  content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: var(--border2);
+}
+.kpi-pipeline-wh-chip:hover .kpi-wh-tooltip { display: block; }
+.kpi-wh-tooltip-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); margin-bottom: 6px;
+}
+.kpi-wh-tooltip-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 11px; padding: 3px 0; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.kpi-wh-tooltip-row:last-child { border-bottom: none; }
+.kpi-wh-tooltip-id { color: var(--accent2); font-weight: 600; }
+.kpi-wh-tooltip-org { color: var(--text2); overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 
 .kpi-controls {
   display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
@@ -2015,11 +2041,17 @@ function kpiRenderPipeline() {
     const byWh = {};
     orders.forEach(o => {
       const w = (o.warehouse || '').replace('Warehouse - ', '') || '?';
-      byWh[w] = (byWh[w] || 0) + 1;
+      if (!byWh[w]) byWh[w] = [];
+      byWh[w].push({ id: o.friendly_order_id || o.id || '—', org: o.organization || '—' });
     });
     el.innerHTML = Object.entries(byWh)
-      .sort((a, b) => b[1] - a[1])
-      .map(([w, n]) => `<span class="kpi-pipeline-wh-chip">${escapeHTML(w)}: ${n}</span>`)
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([w, items]) => {
+        const rows = items.map(it =>
+          `<div class="kpi-wh-tooltip-row"><span class="kpi-wh-tooltip-id">${escapeHTML(it.id)}</span><span class="kpi-wh-tooltip-org">${escapeHTML(it.org)}</span></div>`
+        ).join('');
+        return `<span class="kpi-pipeline-wh-chip">${escapeHTML(w)}: ${items.length}<div class="kpi-wh-tooltip"><div class="kpi-wh-tooltip-title">${escapeHTML(w)}</div>${rows}</div></span>`;
+      })
       .join('');
   }
 
