@@ -1143,6 +1143,11 @@
     <select id="kpiWh" onchange="kpiDashRender()">
       <option value="">All warehouses</option>
     </select>
+    <label for="kpiLeg">Leg:</label>
+    <select id="kpiLeg" onchange="kpiDashRender()">
+      <option value="facility_completed">At facility → Completed</option>
+      <option value="shipped_facility">Shipped → At facility</option>
+    </select>
     <span id="kpiDashStatus" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
   </div>
 
@@ -1571,7 +1576,44 @@ async function kpiFetchCompletedBackstop() {
 // Reads rows from the KPI_Tracker sheet (via the same Apps Script web app's
 // GET ?action=read endpoint), computes SLO metrics, renders cards/charts/tables.
 
-const KPI_SLO_HOURS = 48; // < 2 days from at_facility -> completed
+const KPI_SLO_HOURS = 48;         // < 2 days from at_facility -> completed
+const KPI_SLO_SHIPPED_HOURS = 72; // < 3 days from shipped -> at_facility
+
+// Returns config object describing the currently selected KPI leg.
+function kpiGetLegConfig() {
+  const leg = (document.getElementById('kpiLeg') || {}).value || 'facility_completed';
+  if (leg === 'shipped_facility') {
+    return {
+      leg,
+      sloHours:   KPI_SLO_SHIPPED_HOURS,
+      startField: 'shipped_at',
+      endField:   'at_facility_at',
+      label:      'Shipped → At facility',
+      subLabel:   'shipped → at facility',
+      sloLabel:   `currently >${KPI_SLO_SHIPPED_HOURS}h in transit`,
+      hasData:    r => r.shipped_at && r.at_facility_at,
+      isOpen:     r => r.shipped_at && !r.at_facility_at,
+      getHours:   r => {
+        const s = kpiParseDate(r.shipped_at), e = kpiParseDate(r.at_facility_at);
+        return (s && e) ? (e - s) / 3600000 : null;
+      },
+      sloMet:     (r, h) => h !== null ? (h <= KPI_SLO_SHIPPED_HOURS ? 'yes' : 'no') : null,
+    };
+  }
+  return {
+    leg,
+    sloHours:   KPI_SLO_HOURS,
+    startField: 'at_facility_at',
+    endField:   'completed_at',
+    label:      'At facility → Completed',
+    subLabel:   'at facility → completed',
+    sloLabel:   `currently >${KPI_SLO_HOURS}h at facility`,
+    hasData:    r => r.at_facility_at && r.completed_at,
+    isOpen:     r => r.at_facility_at && !r.completed_at,
+    getHours:   r => parseFloat(r.hours_at_facility_to_completed),
+    sloMet:     (r, h) => r.slo_met || null,
+  };
+}
 let kpiDashRows = [];
 let kpiDashLoading = false;
 let kpiTrendChartObj = null;
@@ -1643,13 +1685,13 @@ function kpiFilterRows() {
   const wh = document.getElementById('kpiWh').value;
   const cutoff = range === 'all' ? null : (Date.now() - parseInt(range, 10) * 86400000);
 
+  const cfg = kpiGetLegConfig();
   return kpiDashRows.filter(r => {
     if (wh && r.warehouse !== wh) return false;
     if (cutoff) {
-      const completed = kpiParseDate(r.completed_at);
-      // For window filtering we use completed_at if present, otherwise at_facility_at,
-      // otherwise ordered_at — so in-progress orders still show in the breach list.
-      const ref = completed || kpiParseDate(r.at_facility_at) || kpiParseDate(r.ordered_at);
+      const endDate   = kpiParseDate(r[cfg.endField]);
+      const startDate = kpiParseDate(r[cfg.startField]);
+      const ref = endDate || startDate || kpiParseDate(r.ordered_at);
       if (!ref || ref.getTime() < cutoff) return false;
     }
     return true;
@@ -1666,33 +1708,47 @@ function kpiDashRender() {
 }
 
 function kpiRenderCards(rows) {
-  const completed = rows.filter(r => r.at_facility_at && r.completed_at);
-  const hours = completed.map(r => parseFloat(r.hours_at_facility_to_completed)).filter(n => !isNaN(n));
+  const cfg = kpiGetLegConfig();
 
-  const sloMet = completed.filter(r => r.slo_met === 'yes').length;
-  const sloEval = completed.filter(r => r.slo_met === 'yes' || r.slo_met === 'no').length;
-  const sloPct = sloEval > 0 ? Math.round((sloMet / sloEval) * 100) : null;
+  const completed = rows.filter(r => cfg.hasData(r));
+  const hours = completed.map(r => cfg.getHours(r)).filter(n => n !== null && !isNaN(n));
+
+  const sloEvalRows = completed.filter(r => {
+    const h = cfg.getHours(r);
+    const sm = cfg.sloMet(r, h);
+    return sm === 'yes' || sm === 'no';
+  });
+  const sloMetCount = sloEvalRows.filter(r => cfg.sloMet(r, cfg.getHours(r)) === 'yes').length;
+  const sloEval = sloEvalRows.length;
+  const sloPct = sloEval > 0 ? Math.round((sloMetCount / sloEval) * 100) : null;
 
   const median = hours.length ? kpiPercentile(hours, 0.5) : null;
-  const p90 = hours.length ? kpiPercentile(hours, 0.9) : null;
+  const p90    = hours.length ? kpiPercentile(hours, 0.9) : null;
 
-  // Open breaches: at_facility_at set, completed_at empty, age > SLO
+  // Open breaches: start set, end empty, age > SLO
   const now = Date.now();
   const breaches = rows.filter(r => {
-    if (!r.at_facility_at || r.completed_at) return false;
-    const af = kpiParseDate(r.at_facility_at);
-    if (!af) return false;
-    return (now - af.getTime()) > KPI_SLO_HOURS * 3600000;
+    if (!cfg.isOpen(r)) return false;
+    const start = kpiParseDate(r[cfg.startField]);
+    if (!start) return false;
+    return (now - start.getTime()) > cfg.sloHours * 3600000;
   });
 
   const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   setText('kpiVal-slo',    sloPct === null ? '—' : sloPct + '%');
-  setText('kpiSub-slo',    sloEval === 0 ? 'no data' : `${sloMet} of ${sloEval} orders`);
+  setText('kpiSub-slo',    sloEval === 0 ? 'no data' : `${sloMetCount} of ${sloEval} orders`);
   setText('kpiVal-median', median === null ? '—' : median.toFixed(1) + 'h');
   setText('kpiVal-p90',    p90    === null ? '—' : p90.toFixed(1)    + 'h');
   setText('kpiVal-breach', breaches.length);
   setText('kpiVal-total',  completed.length);
   setText('kpiSub-total',  hours.length ? `${hours.length} with cycle time` : 'orders');
+
+  // Update dynamic "leg" subtitles on median/p90 cards
+  document.querySelectorAll('#kpiCard-median .kpi-card-sub, #kpiCard-p90 .kpi-card-sub').forEach(el => {
+    el.textContent = cfg.subLabel;
+  });
+  const breachSub = document.querySelector('#kpiCard-breach .kpi-card-sub');
+  if (breachSub) breachSub.textContent = cfg.sloLabel;
 
   // Color the SLO card based on threshold
   const sloCard = document.getElementById('kpiCard-slo');
@@ -1711,17 +1767,18 @@ function kpiRenderTrendChart(rows) {
   if (!ctx || typeof Chart === 'undefined') return;
 
   // Group completed orders by ISO week
+  const cfg = kpiGetLegConfig();
   const byWeek = {};
   rows.forEach(r => {
-    if (!r.at_facility_at || !r.completed_at) return;
-    const completedDate = kpiParseDate(r.completed_at);
-    const hours = parseFloat(r.hours_at_facility_to_completed);
-    if (!completedDate || isNaN(hours)) return;
-    const week = kpiIsoWeekKey(completedDate);
+    if (!cfg.hasData(r)) return;
+    const endDate = kpiParseDate(r[cfg.endField]);
+    const h = cfg.getHours(r);
+    if (!endDate || h === null || isNaN(h)) return;
+    const week = kpiIsoWeekKey(endDate);
     if (!byWeek[week]) byWeek[week] = { hours: [], met: 0, total: 0 };
-    byWeek[week].hours.push(hours);
+    byWeek[week].hours.push(h);
     byWeek[week].total++;
-    if (r.slo_met === 'yes') byWeek[week].met++;
+    if (cfg.sloMet(r, h) === 'yes') byWeek[week].met++;
   });
 
   const weeks = Object.keys(byWeek).sort();
@@ -1765,10 +1822,11 @@ function kpiRenderHistogram(rows) {
   const ctx = document.getElementById('kpiHistChart');
   if (!ctx || typeof Chart === 'undefined') return;
 
+  const cfg = kpiGetLegConfig();
   const hours = rows
-    .filter(r => r.at_facility_at && r.completed_at)
-    .map(r => parseFloat(r.hours_at_facility_to_completed))
-    .filter(n => !isNaN(n));
+    .filter(r => cfg.hasData(r))
+    .map(r => cfg.getHours(r))
+    .filter(n => n !== null && !isNaN(n));
 
   // Buckets: 0-12, 12-24, 24-36, 36-48, 48-72, 72-120, 120+
   const buckets = [
@@ -1799,7 +1857,7 @@ function kpiRenderHistogram(rows) {
       plugins: { legend: { display: false } },
       scales: {
         y: { title: { display: true, text: 'Orders' }, ticks: { precision: 0 } },
-        x: { title: { display: true, text: 'Hours (at facility → completed)' } }
+        x: { title: { display: true, text: `Hours (${kpiGetLegConfig().subLabel})` } }
       }
     }
   });
@@ -1808,14 +1866,23 @@ function kpiRenderHistogram(rows) {
 function kpiRenderBreachTable(rows) {
   const tbody = document.querySelector('#kpiBreachTable tbody');
   const counter = document.getElementById('kpiBreachCount');
+  const thead = document.querySelector('#kpiBreachTable thead tr');
   if (!tbody) return;
+  const cfg = kpiGetLegConfig();
+
+  // Update column header to match the current leg
+  if (thead) {
+    const ths = thead.querySelectorAll('th');
+    if (ths[4]) ths[4].textContent = cfg.leg === 'shipped_facility' ? 'Shipped' : 'At facility';
+  }
+
   const now = Date.now();
   const breaches = rows
-    .filter(r => r.at_facility_at && !r.completed_at)
+    .filter(r => cfg.isOpen(r))
     .map(r => {
-      const af = kpiParseDate(r.at_facility_at);
-      const hoursAt = af ? (now - af.getTime()) / 3600000 : null;
-      return { ...r, _hoursAt: hoursAt, _overdue: hoursAt !== null ? hoursAt - KPI_SLO_HOURS : null };
+      const start = kpiParseDate(r[cfg.startField]);
+      const hoursIn = start ? (now - start.getTime()) / 3600000 : null;
+      return { ...r, _hoursIn: hoursIn, _overdue: hoursIn !== null ? hoursIn - cfg.sloHours : null };
     })
     .filter(r => r._overdue !== null && r._overdue > 0)
     .sort((a, b) => b._overdue - a._overdue);
@@ -1833,7 +1900,7 @@ function kpiRenderBreachTable(rows) {
       <td>${escapeHTML(r.organization || '')}</td>
       <td>${escapeHTML((r.warehouse || '').replace('Warehouse - ', ''))}</td>
       <td>${escapeHTML(r.product_title || '')}</td>
-      <td class="mono">${escapeHTML(String(r.at_facility_at).substring(0, 16).replace('T', ' '))}</td>
+      <td class="mono">${escapeHTML(String(r[cfg.startField] || '').substring(0, 16).replace('T', ' '))}</td>
       <td class="num kpi-breach-age">+${r._overdue.toFixed(1)}h</td>
     </tr>
   `).join('');
@@ -1845,19 +1912,20 @@ function kpiRenderWarehouseTable(rows) {
   if (!tbody) return;
 
   const now = Date.now();
+  const cfg = kpiGetLegConfig();
   const byWh = {};
   rows.forEach(r => {
     const wh = r.warehouse || '(unknown)';
     if (!byWh[wh]) byWh[wh] = { hours: [], met: 0, total: 0, breaches: 0 };
 
-    if (r.at_facility_at && r.completed_at) {
-      const h = parseFloat(r.hours_at_facility_to_completed);
-      if (!isNaN(h)) byWh[wh].hours.push(h);
+    if (cfg.hasData(r)) {
+      const h = cfg.getHours(r);
+      if (h !== null && !isNaN(h)) byWh[wh].hours.push(h);
       byWh[wh].total++;
-      if (r.slo_met === 'yes') byWh[wh].met++;
-    } else if (r.at_facility_at && !r.completed_at) {
-      const af = kpiParseDate(r.at_facility_at);
-      if (af && (now - af.getTime()) > KPI_SLO_HOURS * 3600000) {
+      if (cfg.sloMet(r, h) === 'yes') byWh[wh].met++;
+    } else if (cfg.isOpen(r)) {
+      const start = kpiParseDate(r[cfg.startField]);
+      if (start && (now - start.getTime()) > cfg.sloHours * 3600000) {
         byWh[wh].breaches++;
       }
     }
