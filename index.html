@@ -1656,7 +1656,7 @@ function kpiGetLegConfig() {
       isOpen:     r => r.shipped_at && !r.at_facility_at,
       getHours:   r => {
         const s = kpiParseDate(r.shipped_at), e = kpiParseDate(r.at_facility_at);
-        return (s && e) ? (e - s) / 3600000 : null;
+        return (s && e) ? businessHours(s, e) : null;
       },
       sloMet:     (r, h) => h !== null ? (h <= KPI_SLO_SHIPPED_HOURS ? 'yes' : 'no') : null,
     };
@@ -1671,7 +1671,7 @@ function kpiGetLegConfig() {
     sloLabel:   `currently >${KPI_SLO_HOURS}h at facility`,
     hasData:    r => r.at_facility_at && r.completed_at,
     isOpen:     r => r.at_facility_at && !r.completed_at,
-    getHours:   r => parseFloat(r.hours_at_facility_to_completed),
+    getHours:   r => { const s = kpiParseDate(r.at_facility_at), e = kpiParseDate(r.completed_at); return (s && e) ? businessHours(s, e) : null; },
     sloMet:     (r, h) => r.slo_met || null,
   };
 }
@@ -1719,6 +1719,28 @@ function kpiParseDate(v) {
   if (!v) return null;
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
+}
+
+// Count business hours (Mon–Fri only) between two Date objects.
+function businessHours(start, end) {
+  if (!start || !end || end <= start) return 0;
+  let total = 0;
+  let cur = new Date(start.getTime());
+  while (cur < end) {
+    const day = cur.getDay(); // 0=Sun, 6=Sat
+    if (day !== 0 && day !== 6) {
+      const nextMidnight = new Date(cur);
+      nextMidnight.setDate(nextMidnight.getDate() + 1);
+      nextMidnight.setHours(0, 0, 0, 0);
+      const segEnd = nextMidnight < end ? nextMidnight : end;
+      total += (segEnd - cur) / 3600000;
+    }
+    const nextDay = new Date(cur);
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(0, 0, 0, 0);
+    cur = nextDay;
+  }
+  return total;
 }
 
 function kpiPercentile(arr, p) {
@@ -1793,7 +1815,7 @@ function kpiRenderCards(rows) {
     if (!cfg.isOpen(r)) return false;
     const start = kpiParseDate(r[cfg.startField]);
     if (!start) return false;
-    return (now - start.getTime()) > cfg.sloHours * 3600000;
+    return businessHours(start, new Date(now)) > cfg.sloHours;
   });
 
   const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1943,7 +1965,7 @@ function kpiRenderBreachTable(rows) {
     .filter(r => cfg.isOpen(r))
     .map(r => {
       const start = kpiParseDate(r[cfg.startField]);
-      const hoursIn = start ? (now - start.getTime()) / 3600000 : null;
+      const hoursIn = start ? businessHours(start, new Date(now)) : null;
       return { ...r, _hoursIn: hoursIn, _overdue: hoursIn !== null ? hoursIn - cfg.sloHours : null };
     })
     .filter(r => r._overdue !== null && r._overdue > 0)
@@ -1987,7 +2009,7 @@ function kpiRenderWarehouseTable(rows) {
       if (cfg.sloMet(r, h) === 'yes') byWh[wh].met++;
     } else if (cfg.isOpen(r)) {
       const start = kpiParseDate(r[cfg.startField]);
-      if (start && (now - start.getTime()) > cfg.sloHours * 3600000) {
+      if (start && businessHours(start, new Date(now)) > cfg.sloHours) {
         byWh[wh].breaches++;
       }
     }
