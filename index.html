@@ -2149,7 +2149,12 @@ async function kpiDashLoad() {
     const res = await fetch(KPI_TRACKER_URL + '?action=read');
     const json = await res.json();
     if (!json.ok) throw new Error(json.error || 'unknown');
-    kpiDashRows = json.rows || [];
+    // Apply the global block list to rows already in the sheet (historical data).
+    // The block check at write-time only stops NEW rows from being added.
+    const _allRows = json.rows || [];
+    kpiDashRows = _allRows.filter(r =>
+      !isBlockedWarehouse(r.warehouse) && !isBlockedCustomer(r.organization)
+    );
     kpiDashPopulateWarehouseFilter();
     kpiDashRender();
     kpiDashSetStatus(`Loaded ${kpiDashRows.length} rows · ${new Date().toLocaleTimeString()}`);
@@ -2541,7 +2546,20 @@ function isBlockedCustomer(cust) {
   return false;
 }
 
-function invLoadState()  { try { const s=localStorage.getItem('inbound_tracker_inv_v2'); if(s) invOrders=JSON.parse(s).orders||{}; } catch(e){} }
+function invLoadState()  {
+  try {
+    const s = localStorage.getItem('inbound_tracker_inv_v2');
+    if (s) invOrders = JSON.parse(s).orders || {};
+    // Strip blocked entries from cached data so old localStorage doesn't show
+    // warehouses/customers that have since been added to the block list.
+    Object.keys(invOrders).forEach(fid => {
+      const o = invOrders[fid];
+      if (isBlockedWarehouse(o && o.warehouse) || isBlockedCustomer(o && o.organization)) {
+        delete invOrders[fid];
+      }
+    });
+  } catch(e) {}
+}
 function invSaveState()  { try { localStorage.setItem('inbound_tracker_inv_v2', JSON.stringify({orders:invOrders})); } catch(e){} }
 function invClearAll()   {
   if (!confirm('Clear all local Inventory Orders state?')) return;
@@ -3026,7 +3044,19 @@ let csSortCol = 'created_date', csSortDir = -1;
 let csNewIds  = new Set();
 let csExpanded = new Set();
 
-function csLoadState()  { try { const s=localStorage.getItem('inbound_tracker_cs_v2'); if(s) csOrders=JSON.parse(s).orders||{}; } catch(e){} }
+function csLoadState()  {
+  try {
+    const s = localStorage.getItem('inbound_tracker_cs_v2');
+    if (s) csOrders = JSON.parse(s).orders || {};
+    // Strip blocked entries from cached data (see invLoadState for rationale).
+    Object.keys(csOrders).forEach(fid => {
+      const o = csOrders[fid];
+      if (isBlockedWarehouse(o && o.warehouse) || isBlockedCustomer(o && o.organization)) {
+        delete csOrders[fid];
+      }
+    });
+  } catch(e) {}
+}
 function csSaveState()  { try { localStorage.setItem('inbound_tracker_cs_v2', JSON.stringify({orders:csOrders})); } catch(e){} }
 function csClearAll()   {
   if (!confirm('Clear all local Customer Supplied Orders state?')) return;
