@@ -4752,4 +4752,21 @@ function productsCopyFallback(text) {
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
     const ok = document.execCommand('copy');
-    document.body.r
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) { return false; }
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+invLoadState();
+csLoadState();
+commentsLoad();
+invRenderAll();
+csRenderAll();
+
+setSyncStatus('syncing', 'Loading from API…');
+invFetchFromAPI();
+csFetchFromAPI();
+</script>
+</body>
+</html>
