@@ -4989,6 +4989,97 @@ function productsCopyFallback(text) {
   } catch (e) { return false; }
 }
 
+// ─── KEYDELIVERY HELPERS (defined early so render functions can call kdBtn) ──
+const _KD_KEY    = 'd2ae5b5eb9914504a342057bcdd186ab';
+const _KD_SECRET = 'siViizEUyGqP3262';
+const _KD_TRACK  = 'https://www.kd100.com/api/v1/tracking/realtime';
+const _KD_DETECT = 'https://www.kd100.com/api/v1/carriers/detect';
+
+function kdBtn(code) {
+  if (!code) return '';
+  const safe = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return '<button class="btn-kd-track" onclick="event.stopPropagation();kdTrack(\'' + safe + '\',this)" title="Live track">&#128205;</button>';
+}
+
+function _kdSign(s) {
+  return CryptoJS.MD5(s + _KD_KEY + _KD_SECRET).toString().toUpperCase();
+}
+
+async function _kdPost(url, body) {
+  const s = JSON.stringify(body);
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'API-Key': _KD_KEY, 'signature': _kdSign(s) },
+    body: s
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function _kdFmt(t) {
+  if (!t) return '';
+  try { return new Date(t).toLocaleString(undefined, { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+  catch(e) { return t; }
+}
+
+const _KD_STATUS = {
+  0:{label:'Pending',cls:'kd-b0'}, 1:{label:'Accepted',cls:'kd-b1'},
+  2:{label:'In Transit',cls:'kd-b2'}, 3:{label:'Out for Delivery',cls:'kd-b3'},
+  4:{label:'Delivered',cls:'kd-b4'}, 5:{label:'Exception',cls:'kd-b5'},
+  6:{label:'Expired',cls:'kd-b6'}, 7:{label:'Failed',cls:'kd-b7'},
+};
+
+function kdClose() {
+  const el = document.getElementById('kd-overlay');
+  if (el) el.classList.remove('open');
+}
+
+async function kdTrack(trackingCode, btnEl) {
+  if (!trackingCode) return;
+  const overlay = document.getElementById('kd-overlay');
+  const body    = document.getElementById('kd-modal-body');
+  const numEl   = document.getElementById('kd-modal-num');
+  if (!overlay) return;
+  numEl.textContent = trackingCode;
+  body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Detecting carrier…</div>';
+  overlay.classList.add('open');
+  if (btnEl) { btnEl.classList.add('loading'); btnEl.textContent = '…'; }
+  try {
+    const det = await _kdPost(_KD_DETECT, { tracking_number: trackingCode });
+    if (!det.data || !det.data.length) throw new Error('Carrier not detected');
+    const { carrier_id, carrier_name } = det.data[0];
+    body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Fetching from ' + carrier_name + '…</div>';
+    const res = await _kdPost(_KD_TRACK, { carrier_id, tracking_number: trackingCode, area_show:1, order:'desc' });
+    if (res.code !== 200 || !res.data) throw new Error(res.message || 'Error ' + res.code);
+    const d = res.data;
+    const st = _KD_STATUS[d.order_status_code] || {label:'Unknown',cls:'kd-b0'};
+    const items = d.items || [];
+    const latest = items[0] || {};
+    const msg = latest.order_status_description || latest.context || '—';
+    const loc = latest.location && latest.location !== 'null' ? '📍 ' + latest.location : '';
+    const upd = latest.time ? '🕐 ' + _kdFmt(latest.time) : '';
+    const evHtml = items.map((ev, i) =>
+      '<div class="kd-event"><div class="kd-dot' + (i===0?' first':'') + '"></div><div class="kd-ev-body">' +
+      '<div class="kd-ev-desc">' + (ev.context || ev.order_status_description || 'Update') + '</div>' +
+      (ev.location && ev.location !== 'null' ? '<div class="kd-ev-loc">📍 ' + ev.location + '</div>' : '') +
+      '<div class="kd-ev-time">' + _kdFmt(ev.time) + '</div></div></div>'
+    ).join('');
+    body.innerHTML =
+      '<div class="kd-status-row"><span class="kd-badge ' + st.cls + '">' + st.label + '</span>' +
+      '<span class="kd-carrier">' + carrier_name + '</span></div>' +
+      '<div class="kd-latest-msg">' + msg + '</div>' +
+      '<div class="kd-meta">' + (loc ? '<span>' + loc + '</span>' : '') + (upd ? '<span>' + upd + '</span>' : '') + '</div>' +
+      (items.length ? '<div class="kd-events-label">Tracking History (' + items.length + ' events)</div>' + evHtml : '');
+    if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
+  } catch(e) {
+    const isCors = e.name === 'TypeError';
+    body.innerHTML = '<div class="kd-error">' +
+      (isCors ? '⚠️ Browser blocked the request (CORS). A server-side proxy is needed.'
+              : '⚠️ ' + e.message) + '</div>';
+    if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
+  }
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 invLoadState();
 csLoadState();
@@ -5000,102 +5091,16 @@ setSyncStatus('syncing', 'Loading from API…');
 invFetchFromAPI();
 csFetchFromAPI();
 
-// ─── KEYDELIVERY LIVE TRACKING ────────────────────────────────────────────────
-(function() {
-  const KD_KEY    = 'd2ae5b5eb9914504a342057bcdd186ab';
-  const KD_SECRET = 'siViizEUyGqP3262';
-  const KD_TRACK  = 'https://www.kd100.com/api/v1/tracking/realtime';
-  const KD_DETECT = 'https://www.kd100.com/api/v1/carriers/detect';
-
-  const STATUS = {
-    0:{label:'Pending',cls:'kd-b0'}, 1:{label:'Accepted',cls:'kd-b1'},
-    2:{label:'In Transit',cls:'kd-b2'}, 3:{label:'Out for Delivery',cls:'kd-b3'},
-    4:{label:'Delivered',cls:'kd-b4'}, 5:{label:'Exception',cls:'kd-b5'},
-    6:{label:'Expired',cls:'kd-b6'}, 7:{label:'Failed',cls:'kd-b7'},
-  };
-
-  function kdSign(s) { return CryptoJS.MD5(s + KD_KEY + KD_SECRET).toString().toUpperCase(); }
-
-  async function kdPost(url, body) {
-    const s = JSON.stringify(body);
-    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','API-Key':KD_KEY,'signature':kdSign(s)}, body:s });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  }
-
-  function kdFmt(t) {
-    if (!t) return '';
-    try { return new Date(t).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
-    catch(e) { return t; }
-  }
-
-  // Inject modal HTML once
-  document.body.insertAdjacentHTML('beforeend', `
-  <div class="kd-overlay" id="kd-overlay" onclick="if(event.target===this)kdClose()">
-    <div class="kd-modal">
-      <div class="kd-modal-head">
-        <div>
-          <div class="kd-modal-title">Live Shipment Status</div>
-          <div class="kd-modal-num" id="kd-modal-num"></div>
-        </div>
-        <button class="kd-close" onclick="kdClose()">&#x2715;</button>
-      </div>
-      <div class="kd-modal-body" id="kd-modal-body"></div>
-    </div>
-  </div>`);
-
-  window.kdClose = function() {
-    document.getElementById('kd-overlay').classList.remove('open');
-  };
-
-  window.kdTrack = async function(trackingCode, btnEl) {
-    if (!trackingCode || trackingCode === '\u2014') return;
-    const overlay = document.getElementById('kd-overlay');
-    const body    = document.getElementById('kd-modal-body');
-    const numEl   = document.getElementById('kd-modal-num');
-    numEl.textContent = trackingCode;
-    body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Detecting carrier…</div>';
-    overlay.classList.add('open');
-    if (btnEl) { btnEl.classList.add('loading'); btnEl.textContent = '…'; }
-    try {
-      const det = await kdPost(KD_DETECT, { tracking_number: trackingCode });
-      if (!det.data || !det.data.length) throw new Error('Carrier not detected');
-      const { carrier_id, carrier_name } = det.data[0];
-      body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Fetching from ' + carrier_name + '…</div>';
-      const res = await kdPost(KD_TRACK, { carrier_id, tracking_number: trackingCode, area_show:1, order:'desc' });
-      if (res.code !== 200 || !res.data) throw new Error(res.message || 'Error ' + res.code);
-      const d = res.data;
-      const st = STATUS[d.order_status_code] || {label:'Unknown',cls:'kd-b0'};
-      const items = d.items || [];
-      const latest = items[0] || {};
-      const msg = latest.order_status_description || latest.context || '—';
-      const loc = latest.location && latest.location !== 'null' ? '📍 ' + latest.location : '';
-      const upd = latest.time ? '🕐 ' + kdFmt(latest.time) : '';
-      const evHtml = items.map((ev,i) =>
-        '<div class="kd-event"><div class="kd-dot' + (i===0?' first':'') + '"></div><div class="kd-ev-body">' +
-        '<div class="kd-ev-desc">' + (ev.context || ev.order_status_description || 'Update') + '</div>' +
-        (ev.location && ev.location!=='null' ? '<div class="kd-ev-loc">📍 ' + ev.location + '</div>' : '') +
-        '<div class="kd-ev-time">' + kdFmt(ev.time) + '</div></div></div>'
-      ).join('');
-      body.innerHTML =
-        '<div class="kd-status-row"><span class="kd-badge ' + st.cls + '">' + st.label + '</span><span class="kd-carrier">' + carrier_name + '</span></div>' +
-        '<div class="kd-latest-msg">' + msg + '</div>' +
-        '<div class="kd-meta">' + (loc?'<span>'+loc+'</span>':'') + (upd?'<span>'+upd+'</span>':'') + '</div>' +
-        (items.length ? '<div class="kd-events-label">Tracking History (' + items.length + ' events)</div>' + evHtml : '');
-      if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
-    } catch(e) {
-      const isCors = e.name === 'TypeError';
-      body.innerHTML = '<div class="kd-error">' + (isCors ? '⚠️ Browser blocked the request (CORS). A server-side proxy is needed.' : '⚠️ ' + e.message) + '</div>';
-      if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
-    }
-  };
-
-  window.kdBtn = function(code) {
-    if (!code) return '';
-    const safe = code.replace(/'/g, "\\'");
-    return '<button class="btn-kd-track" onclick="event.stopPropagation();kdTrack(\'' + safe + '\',this)" title="Live track">📍</button>';
-  };
-})();
+// Inject KD modal into DOM
+document.body.insertAdjacentHTML('beforeend',
+  '<div class="kd-overlay" id="kd-overlay" onclick="if(event.target===this)kdClose()">' +
+  '<div class="kd-modal">' +
+  '<div class="kd-modal-head">' +
+  '<div><div class="kd-modal-title">Live Shipment Status</div>' +
+  '<div class="kd-modal-num" id="kd-modal-num"></div></div>' +
+  '<button class="kd-close" onclick="kdClose()">&#x2715;</button>' +
+  '</div><div class="kd-modal-body" id="kd-modal-body"></div>' +
+  '</div></div>');
 </script>
 </body>
 </html>
