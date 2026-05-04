@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inbound Order Tracker — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <style>
   :root {
     --bg:       #f0f2f5;
@@ -413,6 +414,64 @@
   .toast.show { transform: translateY(0); opacity: 1; }
   .tracking-link { color: var(--accent2); text-decoration: none; font-family: var(--mono); font-size: 11px; }
   .tracking-link:hover { text-decoration: underline; }
+  /* ── KeyDelivery live-track button ── */
+  .btn-kd-track {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 6px; border-radius: 4px; font-size: 10px;
+    font-family: var(--mono); font-weight: 600; cursor: pointer;
+    border: 1px solid rgba(61,111,255,0.3);
+    background: rgba(61,111,255,0.08); color: var(--accent2);
+    transition: all 0.15s; vertical-align: middle; margin-left: 5px; white-space: nowrap;
+  }
+  .btn-kd-track:hover { background: rgba(61,111,255,0.18); border-color: var(--accent); }
+  .btn-kd-track.loading { opacity: 0.6; cursor: not-allowed; }
+  /* ── Tracking modal overlay ── */
+  .kd-overlay {
+    display: none; position: fixed; inset: 0; z-index: 10000;
+    background: rgba(10,12,28,0.45); backdrop-filter: blur(2px);
+    align-items: center; justify-content: center;
+  }
+  .kd-overlay.open { display: flex; }
+  .kd-modal {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 14px; width: 480px; max-width: 95vw; max-height: 90vh;
+    overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+  }
+  .kd-modal-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--border); background: var(--surface2);
+  }
+  .kd-modal-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .kd-modal-num { font-family: var(--mono); font-size: 12px; color: var(--accent2); margin-top: 3px; }
+  .kd-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.15s; }
+  .kd-close:hover { color: var(--text); }
+  .kd-modal-body { padding: 18px 20px; overflow-y: auto; flex: 1; }
+  .kd-status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .kd-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
+  .kd-b0{background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0}
+  .kd-b1{background:#f3e8ff;color:#9333ea;border:1px solid #e9d5ff}
+  .kd-b2{background:rgba(61,111,255,0.12);color:var(--accent2);border:1px solid rgba(61,111,255,0.25)}
+  .kd-b3{background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd}
+  .kd-b4{background:rgba(52,211,153,0.12);color:var(--green);border:1px solid rgba(52,211,153,0.3)}
+  .kd-b5{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+  .kd-b6{background:rgba(217,119,6,0.1);color:var(--amber);border:1px solid rgba(217,119,6,0.2)}
+  .kd-b7{background:rgba(220,38,38,0.1);color:var(--red);border:1px solid rgba(220,38,38,0.2)}
+  .kd-carrier { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .kd-latest-msg { font-size: 13px; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+  .kd-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .kd-events-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 8px; }
+  .kd-event { display: flex; gap: 10px; margin-bottom: 10px; font-size: 12px; }
+  .kd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-top: 4px; flex-shrink: 0; }
+  .kd-dot.first { background: var(--green); }
+  .kd-ev-body { flex: 1; }
+  .kd-ev-desc { color: var(--text); font-weight: 500; line-height: 1.4; }
+  .kd-ev-loc  { color: var(--muted); font-size: 11px; font-family: var(--mono); margin-top: 1px; }
+  .kd-ev-time { color: var(--muted); font-size: 10px; margin-top: 1px; }
+  .kd-spinner { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 32px 0; color: var(--muted); font-size: 13px; }
+  .kd-spin { width: 20px; height: 20px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: kd-spin 0.7s linear infinite; }
+  @keyframes kd-spin { to { transform: rotate(360deg); } }
+  .kd-error { color: var(--red); font-size: 13px; padding: 20px 0; text-align: center; }
   /* SKU tooltip on product name hover */
   .sku-tooltip-wrap { position: relative; display: inline; cursor: default; }
   .sku-tooltip-wrap .sku-tip {
@@ -2644,8 +2703,8 @@ function invRenderTable() {
     let tracking = '—';
     const trackItem = o.items.find(it => it.tracking_url || it.tracking_code);
     if (trackItem) {
-      if (trackItem.tracking_url) tracking = `<a class="tracking-link" href="${trackItem.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${trackItem.tracking_code || 'Track'}</a>`;
-      else tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${trackItem.tracking_code}</span>`;
+      if (trackItem.tracking_url) tracking = `<a class="tracking-link" href="${trackItem.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${trackItem.tracking_code || 'Track'}</a>${kdBtn(trackItem.tracking_code)}`;
+      else tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${trackItem.tracking_code}</span>${kdBtn(trackItem.tracking_code)}`;
     }
 
     let productCell;
@@ -2678,8 +2737,8 @@ function invRenderTable() {
       o.items.forEach((it, idx) => {
         const itemStatusLabel = INV_STATUS_LABELS[it.item_status] || it.item_status;
         let itemTracking = '—';
-        if (it.tracking_url) itemTracking = `<a class="tracking-link" href="${it.tracking_url}" target="_blank" style="max-width:100px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code || 'Track'}</a>`;
-        else if (it.tracking_code) itemTracking = `<span class="mono" style="max-width:100px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code}</span>`;
+        if (it.tracking_url) itemTracking = `<a class="tracking-link" href="${it.tracking_url}" target="_blank" style="max-width:100px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code || 'Track'}</a>${kdBtn(it.tracking_code)}`;
+        else if (it.tracking_code) itemTracking = `<span class="mono" style="max-width:100px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code}</span>${kdBtn(it.tracking_code)}`;
         const eskuItem = (it.sku_id || '').replace(/'/g, "\\'");
         html += `<tr class="child-row">
           <td class="mono" style="color:var(--muted);font-size:11px"><span class="child-indent">└</span> Item ${idx+1}</td>
@@ -2972,8 +3031,8 @@ function csRenderTable() {
     let tracking = '—';
     const trackedPkg = (o.packages||[]).find(p => p.trackingUrl || p.trackingCode);
     if (trackedPkg) {
-      if (trackedPkg.trackingUrl) tracking=`<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>`;
-      else tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>`;
+      if (trackedPkg.trackingUrl) tracking=`<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>${kdBtn(trackedPkg.trackingCode)}`;
+      else tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>${kdBtn(trackedPkg.trackingCode)}`;
     }
 
     let productCell;
@@ -4940,6 +4999,103 @@ csRenderAll();
 setSyncStatus('syncing', 'Loading from API…');
 invFetchFromAPI();
 csFetchFromAPI();
+
+// ─── KEYDELIVERY LIVE TRACKING ────────────────────────────────────────────────
+(function() {
+  const KD_KEY    = 'd2ae5b5eb9914504a342057bcdd186ab';
+  const KD_SECRET = 'siViizEUyGqP3262';
+  const KD_TRACK  = 'https://www.kd100.com/api/v1/tracking/realtime';
+  const KD_DETECT = 'https://www.kd100.com/api/v1/carriers/detect';
+
+  const STATUS = {
+    0:{label:'Pending',cls:'kd-b0'}, 1:{label:'Accepted',cls:'kd-b1'},
+    2:{label:'In Transit',cls:'kd-b2'}, 3:{label:'Out for Delivery',cls:'kd-b3'},
+    4:{label:'Delivered',cls:'kd-b4'}, 5:{label:'Exception',cls:'kd-b5'},
+    6:{label:'Expired',cls:'kd-b6'}, 7:{label:'Failed',cls:'kd-b7'},
+  };
+
+  function kdSign(s) { return CryptoJS.MD5(s + KD_KEY + KD_SECRET).toString().toUpperCase(); }
+
+  async function kdPost(url, body) {
+    const s = JSON.stringify(body);
+    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json','API-Key':KD_KEY,'signature':kdSign(s)}, body:s });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  function kdFmt(t) {
+    if (!t) return '';
+    try { return new Date(t).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    catch(e) { return t; }
+  }
+
+  // Inject modal HTML once
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="kd-overlay" id="kd-overlay" onclick="if(event.target===this)kdClose()">
+    <div class="kd-modal">
+      <div class="kd-modal-head">
+        <div>
+          <div class="kd-modal-title">Live Shipment Status</div>
+          <div class="kd-modal-num" id="kd-modal-num"></div>
+        </div>
+        <button class="kd-close" onclick="kdClose()">&#x2715;</button>
+      </div>
+      <div class="kd-modal-body" id="kd-modal-body"></div>
+    </div>
+  </div>`);
+
+  window.kdClose = function() {
+    document.getElementById('kd-overlay').classList.remove('open');
+  };
+
+  window.kdTrack = async function(trackingCode, btnEl) {
+    if (!trackingCode || trackingCode === '\u2014') return;
+    const overlay = document.getElementById('kd-overlay');
+    const body    = document.getElementById('kd-modal-body');
+    const numEl   = document.getElementById('kd-modal-num');
+    numEl.textContent = trackingCode;
+    body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Detecting carrier…</div>';
+    overlay.classList.add('open');
+    if (btnEl) { btnEl.classList.add('loading'); btnEl.textContent = '…'; }
+    try {
+      const det = await kdPost(KD_DETECT, { tracking_number: trackingCode });
+      if (!det.data || !det.data.length) throw new Error('Carrier not detected');
+      const { carrier_id, carrier_name } = det.data[0];
+      body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Fetching from ' + carrier_name + '…</div>';
+      const res = await kdPost(KD_TRACK, { carrier_id, tracking_number: trackingCode, area_show:1, order:'desc' });
+      if (res.code !== 200 || !res.data) throw new Error(res.message || 'Error ' + res.code);
+      const d = res.data;
+      const st = STATUS[d.order_status_code] || {label:'Unknown',cls:'kd-b0'};
+      const items = d.items || [];
+      const latest = items[0] || {};
+      const msg = latest.order_status_description || latest.context || '—';
+      const loc = latest.location && latest.location !== 'null' ? '📍 ' + latest.location : '';
+      const upd = latest.time ? '🕐 ' + kdFmt(latest.time) : '';
+      const evHtml = items.map((ev,i) =>
+        '<div class="kd-event"><div class="kd-dot' + (i===0?' first':'') + '"></div><div class="kd-ev-body">' +
+        '<div class="kd-ev-desc">' + (ev.context || ev.order_status_description || 'Update') + '</div>' +
+        (ev.location && ev.location!=='null' ? '<div class="kd-ev-loc">📍 ' + ev.location + '</div>' : '') +
+        '<div class="kd-ev-time">' + kdFmt(ev.time) + '</div></div></div>'
+      ).join('');
+      body.innerHTML =
+        '<div class="kd-status-row"><span class="kd-badge ' + st.cls + '">' + st.label + '</span><span class="kd-carrier">' + carrier_name + '</span></div>' +
+        '<div class="kd-latest-msg">' + msg + '</div>' +
+        '<div class="kd-meta">' + (loc?'<span>'+loc+'</span>':'') + (upd?'<span>'+upd+'</span>':'') + '</div>' +
+        (items.length ? '<div class="kd-events-label">Tracking History (' + items.length + ' events)</div>' + evHtml : '');
+      if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
+    } catch(e) {
+      const isCors = e.name === 'TypeError';
+      body.innerHTML = '<div class="kd-error">' + (isCors ? '⚠️ Browser blocked the request (CORS). A server-side proxy is needed.' : '⚠️ ' + e.message) + '</div>';
+      if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
+    }
+  };
+
+  window.kdBtn = function(code) {
+    if (!code) return '';
+    const safe = code.replace(/'/g, "\\'");
+    return '<button class="btn-kd-track" onclick="event.stopPropagation();kdTrack(\'' + safe + '\',this)" title="Live track">📍</button>';
+  };
+})();
 </script>
 </body>
 </html>
