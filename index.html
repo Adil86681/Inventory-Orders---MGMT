@@ -1627,7 +1627,7 @@ function kpiGetLegConfig() {
       isOpen:     r => r.shipped_at && !r.at_facility_at,
       getHours:   r => {
         const s = kpiParseDate(r.shipped_at), e = kpiParseDate(r.at_facility_at);
-        return (s && e) ? (e - s) / 3600000 : null;
+        return (s && e) ? kpiBusinessHoursBetween(s.getTime(), e.getTime()) : null;
       },
       sloMet:     (r, h) => h !== null ? (h <= KPI_SLO_SHIPPED_HOURS ? 'yes' : 'no') : null,
     };
@@ -1642,7 +1642,10 @@ function kpiGetLegConfig() {
     sloLabel:   `currently >${KPI_SLO_HOURS}h at facility`,
     hasData:    r => r.at_facility_at && r.completed_at,
     isOpen:     r => r.at_facility_at && !r.completed_at,
-    getHours:   r => parseFloat(r.hours_at_facility_to_completed),
+    getHours:   r => {
+      const s = kpiParseDate(r.at_facility_at), e = kpiParseDate(r.completed_at);
+      return (s && e) ? kpiBusinessHoursBetween(s.getTime(), e.getTime()) : null;
+    },
     sloMet:     (r, h) => r.slo_met || null,
   };
 }
@@ -1690,6 +1693,27 @@ function kpiParseDate(v) {
   if (!v) return null;
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
+}
+// Hours between two timestamps, excluding Saturdays and Sundays. Used so the
+// SLO clock doesn't tick over the weekend when warehouses don't operate.
+// Walks the interval day-by-day and counts only weekday segments.
+function kpiBusinessHoursBetween(startMs, endMs) {
+  if (!startMs || !endMs || endMs <= startMs) return 0;
+  let total = 0;
+  let cursor = new Date(startMs);
+  const endDate = new Date(endMs);
+  while (cursor < endDate) {
+    const dayEnd = new Date(cursor);
+    dayEnd.setHours(0, 0, 0, 0);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const segmentEnd = endDate < dayEnd ? endDate : dayEnd;
+    const dow = cursor.getDay(); // 0 = Sun, 6 = Sat
+    if (dow !== 0 && dow !== 6) {
+      total += (segmentEnd - cursor) / 3600000;
+    }
+    cursor = dayEnd;
+  }
+  return total;
 }
 
 function kpiPercentile(arr, p) {
@@ -1764,7 +1788,7 @@ function kpiRenderCards(rows) {
     if (!cfg.isOpen(r)) return false;
     const start = kpiParseDate(r[cfg.startField]);
     if (!start) return false;
-    return (now - start.getTime()) > cfg.sloHours * 3600000;
+    return kpiBusinessHoursBetween(start.getTime(), now) > cfg.sloHours;
   });
 
   const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1890,7 +1914,7 @@ function kpiRenderHistogram(rows) {
       plugins: { legend: { display: false } },
       scales: {
         y: { title: { display: true, text: 'Orders' }, ticks: { precision: 0 } },
-        x: { title: { display: true, text: `Hours (${kpiGetLegConfig().subLabel})` } }
+        x: { title: { display: true, text: `Business hours (${kpiGetLegConfig().subLabel})` } }
       }
     }
   });
@@ -1914,7 +1938,7 @@ function kpiRenderBreachTable(rows) {
     .filter(r => cfg.isOpen(r))
     .map(r => {
       const start = kpiParseDate(r[cfg.startField]);
-      const hoursIn = start ? (now - start.getTime()) / 3600000 : null;
+      const hoursIn = start ? kpiBusinessHoursBetween(start.getTime(), now) : null;
       return { ...r, _hoursIn: hoursIn, _overdue: hoursIn !== null ? hoursIn - cfg.sloHours : null };
     })
     .filter(r => r._overdue !== null && r._overdue > 0)
@@ -1958,7 +1982,7 @@ function kpiRenderWarehouseTable(rows) {
       if (cfg.sloMet(r, h) === 'yes') byWh[wh].met++;
     } else if (cfg.isOpen(r)) {
       const start = kpiParseDate(r[cfg.startField]);
-      if (start && (now - start.getTime()) > cfg.sloHours * 3600000) {
+      if (start && kpiBusinessHoursBetween(start.getTime(), now) > cfg.sloHours) {
         byWh[wh].breaches++;
       }
     }
@@ -4728,22 +4752,4 @@ function productsCopyFallback(text) {
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
     const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch (e) { return false; }
-}
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-invLoadState();
-csLoadState();
-commentsLoad();
-invRenderAll();
-csRenderAll();
-
-setSyncStatus('syncing', 'Loading from API…');
-invFetchFromAPI();
-csFetchFromAPI();
-</script>
-</body>
-</html>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+    document.body.r
