@@ -739,7 +739,7 @@
     <div class="stat"><div class="stat-label">Ordered</div><div class="stat-value c-purple" id="inv-statOrdered">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barOrdered" style="width:0%;background:var(--purple)"></div></div></div>
     <div class="stat"><div class="stat-label">Shipped</div><div class="stat-value c-amber" id="inv-statShipped">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barShipped" style="width:0%;background:var(--amber)"></div></div></div>
     <div class="stat"><div class="stat-label">At Facility</div><div class="stat-value c-green" id="inv-statFacility">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barFacility" style="width:0%;background:var(--green)"></div></div></div>
-    <div class="stat"><div class="stat-label">Cancelled</div><div class="stat-value c-red" id="inv-statCancelled">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barCancelled" style="width:0%;background:var(--red)"></div></div></div>
+    <div class="stat"><div class="stat-label">Partially Received</div><div class="stat-value c-amber" id="inv-statPartiallyReceived">0</div><div class="stat-bar"><div class="stat-bar-fill" id="inv-barPartiallyReceived" style="width:0%;background:var(--amber)"></div></div></div>
   </div>
 
   <div class="controls">
@@ -766,10 +766,7 @@
         <label class="ms-option"><input type="checkbox" value="ORDERED" onchange="invRenderTable()"> Ordered</label>
         <label class="ms-option"><input type="checkbox" value="SHIPPED" onchange="invRenderTable()"> Shipped</label>
         <label class="ms-option"><input type="checkbox" value="ARRIVED_AT_PROCESSING_FACILITY" onchange="invRenderTable()"> At Facility</label>
-        <label class="ms-option"><input type="checkbox" value="OUT_FOR_DELIVERY" onchange="invRenderTable()"> Out for Delivery</label>
-        <label class="ms-option"><input type="checkbox" value="PARTIALLY_SHIPPED" onchange="invRenderTable()"> Partially Shipped</label>
-        <label class="ms-option"><input type="checkbox" value="RECEIVED" onchange="invRenderTable()"> Received in WH</label>
-        <label class="ms-option"><input type="checkbox" value="CANCELLED" onchange="invRenderTable()"> Cancelled</label>
+        <label class="ms-option"><input type="checkbox" value="PARTIALLY_RECEIVED" onchange="invRenderTable()"> Partially Received</label>
       </div>
     </div>
   </div>
@@ -1630,7 +1627,7 @@ function kpiGetLegConfig() {
       isOpen:     r => r.shipped_at && !r.at_facility_at,
       getHours:   r => {
         const s = kpiParseDate(r.shipped_at), e = kpiParseDate(r.at_facility_at);
-        return (s && e) ? kpiBusinessHours(s, e) : null;
+        return (s && e) ? (e - s) / 3600000 : null;
       },
       sloMet:     (r, h) => h !== null ? (h <= KPI_SLO_SHIPPED_HOURS ? 'yes' : 'no') : null,
     };
@@ -1693,29 +1690,6 @@ function kpiParseDate(v) {
   if (!v) return null;
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
-}
-
-
-// Returns business hours (Mon–Fri only) elapsed between two Date objects.
-function kpiBusinessHours(start, end) {
-  if (!start || !end || end <= start) return 0;
-  let hours = 0;
-  let cur = new Date(start.getTime());
-  while (cur < end) {
-    const day = cur.getDay(); // 0 = Sun, 6 = Sat
-    if (day !== 0 && day !== 6) {
-      const eod = new Date(cur);
-      eod.setDate(eod.getDate() + 1);
-      eod.setHours(0, 0, 0, 0);
-      const sliceEnd = eod < end ? eod : end;
-      hours += (sliceEnd.getTime() - cur.getTime()) / 3600000;
-    }
-    const next = new Date(cur);
-    next.setDate(next.getDate() + 1);
-    next.setHours(0, 0, 0, 0);
-    cur = next;
-  }
-  return hours;
 }
 
 function kpiPercentile(arr, p) {
@@ -1790,7 +1764,7 @@ function kpiRenderCards(rows) {
     if (!cfg.isOpen(r)) return false;
     const start = kpiParseDate(r[cfg.startField]);
     if (!start) return false;
-    return kpiBusinessHours(start, new Date(now)) > cfg.sloHours;
+    return (now - start.getTime()) > cfg.sloHours * 3600000;
   });
 
   const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1940,7 +1914,7 @@ function kpiRenderBreachTable(rows) {
     .filter(r => cfg.isOpen(r))
     .map(r => {
       const start = kpiParseDate(r[cfg.startField]);
-      const hoursIn = start ? kpiBusinessHours(start, new Date(now)) : null;
+      const hoursIn = start ? (now - start.getTime()) / 3600000 : null;
       return { ...r, _hoursIn: hoursIn, _overdue: hoursIn !== null ? hoursIn - cfg.sloHours : null };
     })
     .filter(r => r._overdue !== null && r._overdue > 0)
@@ -1984,7 +1958,7 @@ function kpiRenderWarehouseTable(rows) {
       if (cfg.sloMet(r, h) === 'yes') byWh[wh].met++;
     } else if (cfg.isOpen(r)) {
       const start = kpiParseDate(r[cfg.startField]);
-      if (start && kpiBusinessHours(start, new Date(now)) > cfg.sloHours) {
+      if (start && (now - start.getTime()) > cfg.sloHours * 3600000) {
         byWh[wh].breaches++;
       }
     }
@@ -2129,7 +2103,7 @@ async function invFetchFromAPI() {
           query: invGqlQuery,
           variables: {
             paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] },
-            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED'], firstbaseSupplied: true }
+            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'PARTIALLY_RECEIVED'], firstbaseSupplied: true }
           }
         })
       });
@@ -2280,7 +2254,7 @@ async function invFetchFromAPI() {
 }
 
 function invDeriveGroupStatus(statuses) {
-  const priority = ['OUT_FOR_DELIVERY','ARRIVED_AT_PROCESSING_FACILITY','SHIPPED','PARTIALLY_SHIPPED','ORDERED','PENDING','CANCELLED'];
+  const priority = ['PARTIALLY_RECEIVED','OUT_FOR_DELIVERY','ARRIVED_AT_PROCESSING_FACILITY','SHIPPED','PARTIALLY_SHIPPED','ORDERED','PENDING','CANCELLED'];
   for (const s of priority) {
     if (statuses.includes(s)) return s;
   }
@@ -2294,6 +2268,7 @@ const INV_STATUS_LABELS = {
   'ARRIVED_AT_PROCESSING_FACILITY': 'At Facility',
   'OUT_FOR_DELIVERY': 'Out for Delivery',
   'PARTIALLY_SHIPPED': 'Partially Shipped',
+  'PARTIALLY_RECEIVED': 'Partially Received',
   'CANCELLED': 'Cancelled',
   'RECEIVED': 'Received in WH',
   'COMPLETED': 'Completed'
@@ -2420,7 +2395,7 @@ function invRenderAll()  { invUpdateFilters(); invRenderTable(); invRenderStats(
 function invRenderStats() {
   const all = Object.values(invOrders);
   const total = all.length || 1;
-  const c = {pending:0, ordered:0, shipped:0, facility:0, outForDelivery:0, partiallyShipped:0, cancelled:0, received:0};
+  const c = {pending:0, ordered:0, shipped:0, facility:0, outForDelivery:0, partiallyShipped:0, partiallyReceived:0, cancelled:0, received:0};
   all.forEach(o => {
     switch(o.appStatus) {
       case 'PENDING': c.pending++; break;
@@ -2429,6 +2404,7 @@ function invRenderStats() {
       case 'ARRIVED_AT_PROCESSING_FACILITY': c.facility++; break;
       case 'OUT_FOR_DELIVERY': c.outForDelivery++; break;
       case 'PARTIALLY_SHIPPED': c.partiallyShipped++; break;
+      case 'PARTIALLY_RECEIVED': c.partiallyReceived++; break;
       case 'CANCELLED': c.cancelled++; break;
     }
   });
@@ -2437,12 +2413,12 @@ function invRenderStats() {
   document.getElementById('inv-statOrdered').textContent = c.ordered;
   document.getElementById('inv-statShipped').textContent = c.shipped;
   document.getElementById('inv-statFacility').textContent = c.facility;
-  document.getElementById('inv-statCancelled').textContent = c.cancelled;
+  document.getElementById('inv-statPartiallyReceived').textContent = c.partiallyReceived;
   document.getElementById('inv-barPending').style.width = (c.pending/total*100)+'%';
   document.getElementById('inv-barOrdered').style.width = (c.ordered/total*100)+'%';
   document.getElementById('inv-barShipped').style.width = (c.shipped/total*100)+'%';
   document.getElementById('inv-barFacility').style.width = (c.facility/total*100)+'%';
-  document.getElementById('inv-barCancelled').style.width = (c.cancelled/total*100)+'%';
+  document.getElementById('inv-barPartiallyReceived').style.width = (c.partiallyReceived/total*100)+'%';
 }
 
 function invRenderTable() {
