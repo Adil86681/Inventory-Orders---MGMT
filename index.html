@@ -2583,6 +2583,23 @@ function isBlockedWarehouse(wh) {
   return n === 'slc' || n.includes('warehouse - slc') || n.includes('warehouse slc');
 }
 
+// Hardcoded list of organisations excluded from the Customer Supplied Orders
+// tab. Match is case-insensitive but exact (whitespace-trimmed) — add new
+// entries here to block additional customers.
+const CS_BLOCKED_ORGS = [
+  'Dunder Mifflin Paper Company',
+  'secondbase',
+  'Stark Industries',
+  'Verint Systems Inc.'
+];
+const CS_BLOCKED_ORGS_NORMALIZED = new Set(
+  CS_BLOCKED_ORGS.map(s => s.trim().toLowerCase())
+);
+function isBlockedOrganizationCS(org) {
+  if (!org) return false;
+  return CS_BLOCKED_ORGS_NORMALIZED.has(String(org).trim().toLowerCase());
+}
+
 function invLoadState()  { try { const s=localStorage.getItem('inbound_tracker_inv_v2'); if(s) invOrders=JSON.parse(s).orders||{}; } catch(e){} }
 function invSaveState()  { try { localStorage.setItem('inbound_tracker_inv_v2', JSON.stringify({orders:invOrders})); } catch(e){} }
 function invClearAll()   {
@@ -3156,6 +3173,7 @@ async function csFetchFromAPI() {
       const fid = order.id;
       const wh = order.warehouse?.name || '';
       if (isBlockedWarehouse(wh)) return;
+      if (isBlockedOrganizationCS(order.organization?.name || '')) return;
 
       // Track org name → id for the live-inventory tab picker
       if (order.organization?.name && order.organization?.id) {
