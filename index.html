@@ -569,30 +569,16 @@
   }
   .ps-pf-reset:hover { border-color: var(--accent); color: var(--accent2); }
 
-  /* Expandable grouped rows */
-  .expand-toggle {
-    cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
-    font-family: var(--mono); font-size: 11px; color: var(--accent2);
-    background: none; border: none; padding: 0; user-select: none;
-  }
-  .expand-toggle:hover { color: var(--text); }
-  .expand-arrow {
-    display: inline-block; transition: transform 0.2s; font-size: 10px;
-  }
-  .expand-arrow.open { transform: rotate(90deg); }
-  .item-count-chip {
-    display: inline-flex; align-items: center; gap: 3px;
-    font-size: 10px; font-family: var(--mono); font-weight: 600;
-    background: rgba(61,111,255,0.1); border: 1px solid rgba(61,111,255,0.2);
-    color: var(--accent2); padding: 1px 7px; border-radius: 20px;
-    margin-left: 6px;
-  }
-  .child-row { background: var(--surface2); }
-  .child-row:hover { background: var(--surface3) !important; }
-  .child-row td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid var(--border); }
-  .child-row td:first-child { padding-left: 32px; }
-  .child-indent { color: var(--muted); margin-right: 4px; }
-  .child-row .badge { font-size: 10px; padding: 2px 7px; }
+  /* Flat multi-item row highlight — orders with >1 line item get a tint so
+     rows belonging to the same order are visually grouped at a glance. */
+  tbody tr.multi-item-row { background: rgba(61,111,255,0.04); }
+  tbody tr.multi-item-row:hover { background: rgba(61,111,255,0.09) !important; }
+  tbody tr.received.multi-item-row { background: rgba(217,119,6,0.07); }
+  tbody tr.received.multi-item-row:hover { background: rgba(217,119,6,0.12) !important; }
+  /* Stronger top border on the first row of each order group
+     creates a clear visual break between different orders. */
+  tbody tr.order-group-first td { border-top: 2px solid var(--border2); }
+  tbody tr:first-child td { border-top: none !important; }
 
   .comment-cell { min-width: 140px; max-width: 200px; }
   .comment-input {
@@ -833,7 +819,7 @@
 
   <div class="table-wrap">
     <div class="table-toolbar">
-      <div class="table-toolbar-left">Orders <span class="count-badge" id="inv-rowCount">0</span></div>
+      <div class="table-toolbar-left">Line Items <span class="count-badge" id="inv-rowCount">0</span></div>
       <div class="table-toolbar-right" id="inv-newCount"></div>
     </div>
     <div class="table-scroll">
@@ -912,7 +898,7 @@
 
   <div class="table-wrap">
     <div class="table-toolbar">
-      <div class="table-toolbar-left">Shipments <span class="count-badge" id="cs-rowCount">0</span></div>
+      <div class="table-toolbar-left">Line Items <span class="count-badge" id="cs-rowCount">0</span></div>
       <div class="table-toolbar-right" id="cs-newCount"></div>
     </div>
     <div class="table-scroll">
@@ -2692,8 +2678,6 @@ function escapeHTML(s) {
 let invOrders  = {};
 let invSortCol = 'created_date', invSortDir = -1;
 let invNewIds  = new Set();
-let invExpanded = new Set();
-
 // Block SLC warehouse — check both API format and CSV format
 function isBlockedWarehouse(wh) {
   if (!wh) return false;
@@ -2754,7 +2738,7 @@ function invLoadState()  { try { const s=localStorage.getItem('inbound_tracker_i
 function invSaveState()  { try { localStorage.setItem('inbound_tracker_inv_v2', JSON.stringify({orders:invOrders})); } catch(e){} }
 function invClearAll()   {
   if (!confirm('Clear all local Inventory Orders state?')) return;
-  invOrders={}; invNewIds.clear(); invExpanded.clear(); invSaveState(); invRenderAll();
+  invOrders={}; invNewIds.clear(); invSaveState(); invRenderAll();
   showToast('Local inventory orders cleared');
 }
 
@@ -3003,15 +2987,18 @@ function invCopyIdProduct(fid, btn) {
 }
 function invCopyItemSku(sku, btn) {
   navigator.clipboard.writeText(sku).then(()=>{
-    btn.textContent='✓'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='⎘'; btn.classList.remove('copied'); },1800);
+    btn.textContent='✓ copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='⎘ SKU'; btn.classList.remove('copied'); },1800);
+  });
+}
+function invCopyItemSkuProduct(sku, product, btn) {
+  navigator.clipboard.writeText(sku + '\n' + product).then(()=>{
+    btn.textContent='✓ copied'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='⎘ SKU+Product'; btn.classList.remove('copied'); },1800);
   });
 }
 
-function invToggleExpand(fid) {
-  if (invExpanded.has(fid)) invExpanded.delete(fid); else invExpanded.add(fid);
-  invRenderTable();
-}
+
 
 
 // ─── INV ORG PICKER ────────────────────────────────────────────────────────────────────────────
@@ -3134,82 +3121,58 @@ function invRenderStats() {
 }
 
 function invRenderTable() {
-  const rows = invGetFiltered();
-  rows.sort((a, b) => {
+  const orders = invGetFiltered();
+  orders.sort((a, b) => {
     let av = a[invSortCol] || '', bv = b[invSortCol] || '';
     if (invSortCol === 'totalQty') { av = +av; bv = +bv; }
     return av < bv ? -invSortDir : av > bv ? invSortDir : 0;
   });
   const tbody = document.getElementById('inv-tableBody');
   const empty = document.getElementById('inv-emptyState');
-  document.getElementById('inv-rowCount').textContent = rows.length;
+  // Count total line items across all filtered orders
+  const totalItems = orders.reduce((sum, o) => sum + o.items.length, 0);
+  document.getElementById('inv-rowCount').textContent = totalItems;
   document.getElementById('inv-newCount').textContent = '';
-  if (rows.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  if (orders.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
 
   let html = '';
-  rows.forEach(o => {
+  orders.forEach(o => {
     const fid = o.friendly_order_id;
     const efid = fid.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const isMulti = o.items.length > 1;
-    const isOpen = invExpanded.has(fid);
     const isRec = o.appStatus === 'RECEIVED';
-    const statusLabel = INV_STATUS_LABELS[o.appStatus] || o.appStatus;
+    const multiClass = isMulti ? ' multi-item-row' : '';
 
-    let tracking = '—';
-    const trackItem = o.items.find(it => it.tracking_url || it.tracking_code);
-    if (trackItem) {
-      if (trackItem.tracking_url) tracking = `<a class="tracking-link" href="${trackItem.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${trackItem.tracking_code || 'Track'}</a>${kdBtn(trackItem.tracking_code)}`;
-      else tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${trackItem.tracking_code}</span>${kdBtn(trackItem.tracking_code)}`;
-    }
+    o.items.forEach((it, idx) => {
+      const itemStatusLabel = INV_STATUS_LABELS[it.item_status] || it.item_status;
+      const eskuItem = (it.sku_id || '').replace(/'/g, "\\'");
+      const eprod = (it.product_title || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const groupFirst = idx === 0 ? ' order-group-first' : '';
 
-    let productCell;
-    if (isMulti) {
-      productCell = `<button class="expand-toggle" onclick="invToggleExpand('${efid}')">
-        <span class="expand-arrow ${isOpen?'open':''}">▶</span>
-        ${o.items.length} items
-      </button><span class="item-count-chip">${o.totalQty} units</span>`;
-    } else {
-      const it = o.items[0];
-      productCell = `<span class="sku-tooltip-wrap">${it.product_title || '—'}<span class="sku-tip">SKU: ${it.sku_id || '—'}</span></span>`;
-    }
+      let tracking = '—';
+      if (it.tracking_url) {
+        tracking = `<a class="tracking-link" href="${it.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${it.tracking_code || 'Track'}</a>${kdBtn(it.tracking_code)}`;
+      } else if (it.tracking_code) {
+        tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code}</span>${kdBtn(it.tracking_code)}`;
+      }
 
-    const copyCell = `<div class="copy-col"><button class="btn-copy" onclick="invCopyId('${efid}',this)">⎘ SKU</button><button class="btn-copy" onclick="invCopyIdProduct('${efid}',this)">⎘ SKU+Product</button></div>`;
+      const productCell = `<span class="sku-tooltip-wrap">${it.product_title || '—'}<span class="sku-tip">SKU: ${it.sku_id || '—'}</span></span>`;
+      const copyCell = `<div class="copy-col"><button class="btn-copy" onclick="invCopyItemSku('${eskuItem}',this)">⎘ SKU</button><button class="btn-copy" onclick="invCopyItemSkuProduct('${eskuItem}','${eprod}',this)">⎘ SKU+Product</button></div>`;
 
-    html += `<tr class="${isRec?'received':''}">
-      <td class="id-cell">${fid}</td>
-      <td>${o.organization || '—'}</td>
-      <td class="product-cell">${productCell}</td>
-      <td class="copy-col-cell">${copyCell}</td>
-      <td class="mono">${o.totalQty || '—'}</td>
-      <td class="mono">${whLabel(o.warehouse)}</td>
-      <td class="mono">${o.po_number || '—'}</td>
-      <td class="mono" style="max-width:130px;overflow:hidden">${tracking}</td>
-      <td><span class="badge badge-${o.appStatus}">${statusLabel}</span></td>
-      <td class="date-cell">${o.created_date || '—'}</td>
-    </tr>`;
-
-    if (isMulti && isOpen) {
-      o.items.forEach((it, idx) => {
-        const itemStatusLabel = INV_STATUS_LABELS[it.item_status] || it.item_status;
-        let itemTracking = '—';
-        if (it.tracking_url) itemTracking = `<a class="tracking-link" href="${it.tracking_url}" target="_blank" style="max-width:100px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code || 'Track'}</a>${kdBtn(it.tracking_code)}`;
-        else if (it.tracking_code) itemTracking = `<span class="mono" style="max-width:100px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code}</span>${kdBtn(it.tracking_code)}`;
-        const eskuItem = (it.sku_id || '').replace(/'/g, "\\'");
-        html += `<tr class="child-row">
-          <td class="mono" style="color:var(--muted);font-size:11px"><span class="child-indent">└</span> Item ${idx+1}</td>
-          <td></td>
-          <td class="product-cell" style="font-size:12px"><span class="sku-tooltip-wrap">${it.product_title || '—'}<span class="sku-tip">SKU: ${it.sku_id || '—'}</span></span></td>
-          <td><button class="btn-copy" onclick="invCopyItemSku('${eskuItem}',this)" style="font-size:9px">⎘</button></td>
-          <td class="mono">${it.quantity}</td>
-          <td></td>
-          <td></td>
-          <td style="max-width:100px;overflow:hidden">${itemTracking}</td>
-          <td><span class="badge badge-${it.item_status}">${itemStatusLabel}</span></td>
-          <td class="date-cell" style="font-size:10px">${it.est_delivery || '—'}</td>
-        </tr>`;
-      });
-    }
+      html += `<tr class="${isRec ? 'received' : ''}${multiClass}${groupFirst}">
+        <td class="id-cell">${fid}</td>
+        <td>${o.organization || '—'}</td>
+        <td class="product-cell">${productCell}</td>
+        <td class="copy-col-cell">${copyCell}</td>
+        <td class="mono">${it.quantity}</td>
+        <td class="mono">${whLabel(o.warehouse)}</td>
+        <td class="mono">${o.po_number || '—'}</td>
+        <td class="mono" style="max-width:130px;overflow:hidden">${tracking}</td>
+        <td><span class="badge badge-${it.item_status}">${itemStatusLabel}</span></td>
+        <td class="date-cell">${o.created_date || '—'}</td>
+      </tr>`;
+    });
   });
   tbody.innerHTML = html;
 }
@@ -3238,13 +3201,11 @@ function invMarkCompleted(fid) {
 let csOrders  = {};
 let csSortCol = 'created_date', csSortDir = -1;
 let csNewIds  = new Set();
-let csExpanded = new Set();
-
 function csLoadState()  { try { const s=localStorage.getItem('inbound_tracker_cs_v2'); if(s) csOrders=JSON.parse(s).orders||{}; } catch(e){} }
 function csSaveState()  { try { localStorage.setItem('inbound_tracker_cs_v2', JSON.stringify({orders:csOrders})); } catch(e){} }
 function csClearAll()   {
   if (!confirm('Clear all local Customer Supplied Orders state?')) return;
-  csOrders={}; csNewIds.clear(); csExpanded.clear(); csSaveState(); csRenderAll();
+  csOrders={}; csNewIds.clear(); csSaveState(); csRenderAll();
   showToast('Local customer supplied orders cleared');
 }
 
@@ -3391,10 +3352,7 @@ async function csFetchFromAPI() {
     console.error('CS API fetch error:', err);
   }
 }
-function csToggleExpand(fid) {
-  if (csExpanded.has(fid)) csExpanded.delete(fid); else csExpanded.add(fid);
-  csRenderTable();
-}
+
 
 function csMarkReceived(fid) {
   if (!csOrders[fid]) return;
@@ -3463,79 +3421,68 @@ const CS_STATUS_LABELS = {
 };
 
 function csRenderTable() {
-  const rows=csGetFiltered();
-  rows.sort((a,b)=>{ let av=a[csSortCol]||'',bv=b[csSortCol]||''; if(csSortCol==='totalQty'){av=+av;bv=+bv;} return av<bv?-csSortDir:av>bv?csSortDir:0; });
-  const tbody=document.getElementById('cs-tableBody');
-  const empty=document.getElementById('cs-emptyState');
-  document.getElementById('cs-rowCount').textContent=rows.length;
-  document.getElementById('cs-newCount').textContent='';
-  if(rows.length===0){tbody.innerHTML='';empty.style.display='block';return;}
-  empty.style.display='none';
+  const orders = csGetFiltered();
+  orders.sort((a,b)=>{ let av=a[csSortCol]||'',bv=b[csSortCol]||''; if(csSortCol==='totalQty'){av=+av;bv=+bv;} return av<bv?-csSortDir:av>bv?csSortDir:0; });
+  const tbody = document.getElementById('cs-tableBody');
+  const empty = document.getElementById('cs-emptyState');
+  // Count total line items across all filtered orders
+  const totalItems = orders.reduce((sum, o) => sum + ((o.items && o.items.length) || 1), 0);
+  document.getElementById('cs-rowCount').textContent = totalItems;
+  document.getElementById('cs-newCount').textContent = '';
+  if (orders.length === 0) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
 
   let html = '';
-  rows.forEach(o => {
-    const fid=o.friendly_order_id;
-    const isRec=o.appStatus==='RECEIVED';
+  orders.forEach(o => {
+    const fid = o.friendly_order_id;
+    const isRec = o.appStatus === 'RECEIVED';
     const isMulti = o.items && o.items.length > 1;
-    const isOpen = csExpanded.has(fid);
     const statusLabel = CS_STATUS_LABELS[o.appStatus] || o.appStatus;
-    const efid=fid.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const ceprod=(o.product_title||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    const efid = fid.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const multiClass = isMulti ? ' multi-item-row' : '';
 
-    let btn = isRec
+    // Order-level receive button (same state shown on every item row)
+    const btn = isRec
       ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-receive done" disabled>✓ Received</button><button class="btn-unreceive" onclick="csUnreceive('${efid}')">↩ Unreceive</button></div>`
       : `<button class="btn-receive" onclick="csMarkReceived('${efid}')">Mark Received</button>`;
 
-    // Build tracking from packages
+    // Order-level tracking from packages (shared across all items)
     let tracking = '—';
     const trackedPkg = (o.packages||[]).find(p => p.trackingUrl || p.trackingCode);
     if (trackedPkg) {
-      if (trackedPkg.trackingUrl) tracking=`<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>${kdBtn(trackedPkg.trackingCode)}`;
-      else tracking=`<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>${kdBtn(trackedPkg.trackingCode)}`;
+      if (trackedPkg.trackingUrl) tracking = `<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>${kdBtn(trackedPkg.trackingCode)}`;
+      else tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>${kdBtn(trackedPkg.trackingCode)}`;
     }
 
-    let productCell;
-    if (isMulti) {
-      productCell = `<button class="expand-toggle" onclick="csToggleExpand('${efid}')">
-        <span class="expand-arrow ${isOpen?'open':''}">▶</span>
-        ${o.items.length} items
-      </button><span class="item-count-chip">${o.totalQty} units</span>`;
-    } else {
-      productCell = `<span class="sku-tooltip-wrap">${o.product_title||'—'}<span class="sku-tip">SKU: ${o.sku_id||'—'}</span></span>`;
-    }
+    // Fall back to a synthetic single-item if items array is empty
+    const items = (o.items && o.items.length > 0)
+      ? o.items
+      : [{ product_title: o.product_title || '—', sku_id: o.sku_id || '', quantity: o.totalQty || '—', item_status: o.appStatus }];
 
-    html += `<tr class="${isRec?'received':''}">
-      <td>${o.organization||'—'}</td>
-      <td class="product-cell">${productCell}</td>
-      <td class="copy-col-cell"><div class="copy-col"><button class="btn-copy" onclick="csCopyId('${efid}',this)">⎘ SKU</button><button class="btn-copy" onclick="csCopyIdProduct('${efid}','${ceprod}',this)">⎘ SKU+Product</button></div></td>
-      <td class="mono">${o.totalQty||'—'}</td>
-      <td class="mono">${whLabel(o.warehouse||'')}</td>
-      <td class="mono">${o.po_number||'—'}</td>
-      <td style="max-width:130px;overflow:hidden">${tracking}</td>
-      <td><span class="badge badge-${o.appStatus}">${statusLabel}</span></td>
-      <td class="date-cell">${fmtDate(o.created_date)}</td>
-      <td class="comment-cell">${commentInput(fid)}</td>
-      <td>${btn}</td></tr>`;
+    items.forEach((it, idx) => {
+      const itemStatusLabel = CS_STATUS_LABELS[it.item_status] || it.item_status || statusLabel;
+      const itemBadgeStatus = it.item_status || o.appStatus;
+      const eskuItem = (it.sku_id || '').replace(/'/g, "\\'");
+      const eprod = (it.product_title || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const groupFirst = idx === 0 ? ' order-group-first' : '';
 
-    if (isMulti && isOpen) {
-      o.items.forEach((it, idx) => {
-        const itemStatusLabel = CS_STATUS_LABELS[it.item_status] || it.item_status || '';
-        const eskuItem = (it.sku_id || '').replace(/'/g, "\\'");
-        html += `<tr class="child-row">
-          <td class="mono" style="color:var(--muted);font-size:11px"><span class="child-indent">└</span> Item ${idx+1}</td>
-          <td class="product-cell" style="font-size:12px"><span class="sku-tooltip-wrap">${it.product_title||'—'}<span class="sku-tip">SKU: ${it.sku_id||'—'}</span></span></td>
-          <td><button class="btn-copy" onclick="invCopyItemSku('${eskuItem}',this)" style="font-size:9px">⎘</button></td>
-          <td class="mono">${it.quantity}</td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td>${itemStatusLabel ? `<span class="badge badge-${it.item_status||''}">${itemStatusLabel}</span>` : ''}</td>
-          <td></td>
-          <td></td>
-          <td></td>
-        </tr>`;
-      });
-    }
+      const productCell = `<span class="sku-tooltip-wrap">${it.product_title||'—'}<span class="sku-tip">SKU: ${it.sku_id||'—'}</span></span>`;
+      const copyCell = `<div class="copy-col"><button class="btn-copy" onclick="invCopyItemSku('${eskuItem}',this)">⎘ SKU</button><button class="btn-copy" onclick="invCopyItemSkuProduct('${eskuItem}','${eprod}',this)">⎘ SKU+Product</button></div>`;
+
+      html += `<tr class="${isRec ? 'received' : ''}${multiClass}${groupFirst}">
+        <td>${o.organization||'—'}</td>
+        <td class="product-cell">${productCell}</td>
+        <td class="copy-col-cell">${copyCell}</td>
+        <td class="mono">${it.quantity}</td>
+        <td class="mono">${whLabel(o.warehouse||'')}</td>
+        <td class="mono">${o.po_number||'—'}</td>
+        <td style="max-width:130px;overflow:hidden">${tracking}</td>
+        <td><span class="badge badge-${itemBadgeStatus}">${itemStatusLabel}</span></td>
+        <td class="date-cell">${fmtDate(o.created_date)}</td>
+        <td class="comment-cell">${commentInput(fid)}</td>
+        <td>${btn}</td>
+      </tr>`;
+    });
   });
   tbody.innerHTML = html;
 }
