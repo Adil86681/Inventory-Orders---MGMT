@@ -2600,6 +2600,38 @@ function isBlockedOrganizationCS(org) {
   return CS_BLOCKED_ORGS_NORMALIZED.has(String(org).trim().toLowerCase());
 }
 
+// Hardcoded list of warehouses excluded from the Customer Supplied Orders
+// tab only. Match is case-insensitive and tolerates the "Warehouse - " or
+// "Warehouse " prefix used by the API. Add new entries here to block more.
+const CS_BLOCKED_WAREHOUSES = [
+  'SLC Export',
+  'SLC Verint'
+];
+const CS_BLOCKED_WAREHOUSES_NORMALIZED = new Set(
+  CS_BLOCKED_WAREHOUSES.map(s => s.trim().toLowerCase())
+);
+function isBlockedWarehouseCS(wh) {
+  if (!wh) return false;
+  const n = String(wh).trim().toLowerCase().replace(/^warehouse\s*-?\s*/, '');
+  return CS_BLOCKED_WAREHOUSES_NORMALIZED.has(n);
+}
+
+// Hardcoded list of warehouses excluded from the Inventory Orders tab only.
+// Match is case-insensitive and tolerates the "Warehouse - " or "Warehouse "
+// prefix used by the API. Add new entries here to block more.
+const INV_BLOCKED_WAREHOUSES = [
+  'SLC Verint',
+  'Warehouse - UK'
+];
+const INV_BLOCKED_WAREHOUSES_NORMALIZED = new Set(
+  INV_BLOCKED_WAREHOUSES.map(s => s.trim().toLowerCase().replace(/^warehouse\s*-?\s*/, ''))
+);
+function isBlockedWarehouseINV(wh) {
+  if (!wh) return false;
+  const n = String(wh).trim().toLowerCase().replace(/^warehouse\s*-?\s*/, '');
+  return INV_BLOCKED_WAREHOUSES_NORMALIZED.has(n);
+}
+
 function invLoadState()  { try { const s=localStorage.getItem('inbound_tracker_inv_v2'); if(s) invOrders=JSON.parse(s).orders||{}; } catch(e){} }
 function invSaveState()  { try { localStorage.setItem('inbound_tracker_inv_v2', JSON.stringify({orders:invOrders})); } catch(e){} }
 function invClearAll()   {
@@ -2709,6 +2741,7 @@ async function invFetchFromAPI() {
       const wh = order.warehouse?.name || '';
 
       if (isBlockedWarehouse(wh)) return;
+      if (isBlockedWarehouseINV(wh)) return;
 
       // Track org name → id for the live-inventory tab picker
       if (order.organization?.name && order.organization?.id) {
@@ -2915,7 +2948,7 @@ function invLoadSelected() {
 }
 
 function invUpdateFilters() {
-  const whs = [...new Set(Object.values(invOrders).map(o => o.warehouse).filter(Boolean))].sort();
+  const whs = [...new Set(Object.values(invOrders).map(o => o.warehouse).filter(w => w && !isBlockedWarehouseINV(w)))].sort();
   msPopulateDynamic('inv-warehouseMenu', 'inv-warehouseTrigger', whs, 'All Warehouses');
   const cats = [...new Set(Object.values(invOrders).flatMap(o => o.items.map(it => it.brand)).filter(Boolean))].sort();
   msPopulateDynamic('inv-categoryMenu', 'inv-categoryTrigger', cats, 'All Categories');
@@ -2931,6 +2964,7 @@ function invGetFiltered() {
   const checked = [...document.querySelectorAll('#inv-statusMenu input:checked')].map(c=>c.value);
   const selOrgs = [...document.querySelectorAll('#inv-orgMenu input:checked')].map(c=>c.value);
   return Object.values(invOrders).filter(o => {
+    if (isBlockedWarehouseINV(o.warehouse))             return false;
     if (selOrgs.length && !selOrgs.includes(o.organization)) return false;
     if (whs.length   && !whs.includes(o.warehouse))     return false;
     if (custs.length && !custs.includes(o.organization)) return false;
@@ -3173,6 +3207,7 @@ async function csFetchFromAPI() {
       const fid = order.id;
       const wh = order.warehouse?.name || '';
       if (isBlockedWarehouse(wh)) return;
+      if (isBlockedWarehouseCS(wh)) return;
       if (isBlockedOrganizationCS(order.organization?.name || '')) return;
 
       // Track org name → id for the live-inventory tab picker
@@ -3252,7 +3287,7 @@ function csUnreceive(fid) {
   csSaveState(); csRenderAll(); showToast('Marked as unreceived');
 }
 function csUpdateFilters() {
-  const whs = [...new Set(Object.values(csOrders).map(o => o.warehouse).filter(Boolean))].sort();
+  const whs = [...new Set(Object.values(csOrders).map(o => o.warehouse).filter(w => w && !isBlockedWarehouseCS(w)))].sort();
   msPopulateDynamic('cs-warehouseMenu', 'cs-warehouseTrigger', whs, 'All Warehouses');
   const cats = [...new Set(Object.values(csOrders).flatMap(o => (o.items||[]).map(it => it.brand)).filter(Boolean))].sort();
   msPopulateDynamic('cs-categoryMenu', 'cs-categoryTrigger', cats, 'All Brands');
@@ -3266,6 +3301,7 @@ function csGetFiltered() {
   const custs=[...document.querySelectorAll('#cs-customerMenu input:checked')].map(c=>c.value);
   const checked=[...document.querySelectorAll('#cs-statusMenu input:checked')].map(c=>c.value);
   return Object.values(csOrders).filter(o=>{
+    if (isBlockedWarehouseCS(o.warehouse))               return false;
     if (whs.length   && !whs.includes(o.warehouse))      return false;
     if (cats.length  && !cats.some(c => (o.items||[]).some(it => it.brand === c))) return false;
     if (custs.length && !custs.includes(o.organization))  return false;
