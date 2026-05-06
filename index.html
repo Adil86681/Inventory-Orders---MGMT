@@ -1466,19 +1466,28 @@ function kpiSetStatus(state, text) {
 // Apps Script doPost can't reply to a CORS preflight, so we send as text/plain
 // (a "simple" Content-Type that skips the OPTIONS check). The body is still
 // JSON; the Apps Script JSON.parses it the same way.
+//
+// Requests are serialised through kpiSendQueue so only one POST is ever in
+// flight at a time. This prevents concurrent invFetchFromAPI calls (e.g. a
+// manual resync and the auto-refresh timer firing simultaneously) from both
+// trying to acquire the Apps Script lock and timing out.
+let kpiSendQueue = Promise.resolve();
 function kpiSendEvents(events) {
-  return fetch(KPI_TRACKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ events })
-  })
-  .then(res => res.json())
-  .then(json => {
-    if (json && json.ok) return true;
-    console.error('KPI write failed:', json);
-    return false;
-  })
-  .catch(err => { console.error('KPI network error:', err); return false; });
+  kpiSendQueue = kpiSendQueue.then(() =>
+    fetch(KPI_TRACKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ events })
+    })
+    .then(res => res.json())
+    .then(json => {
+      if (json && json.ok) return true;
+      console.error('KPI write failed:', json);
+      return false;
+    })
+    .catch(err => { console.error('KPI network error:', err); return false; })
+  );
+  return kpiSendQueue;
 }
 
 function kpiBuildMeta(order, items) {
