@@ -1355,13 +1355,16 @@
       <p>Coventry &amp; Dreiech — INS shipments pending item code response</p>
     </div>
     <div class="page-actions">
-      <button class="btn btn-primary" onclick="grvClearRows()">🗑 Clear</button>
+      <button class="btn btn-primary" onclick="grvStartWarehouse('Coventry')" style="background:var(--blue,#4f6ef7);margin-right:8px;">▶ Start Coventry</button>
+      <button class="btn btn-primary" onclick="grvStartWarehouse('Dreiech')" style="background:var(--green,#22c55e);margin-right:8px;">▶ Start Dreiech</button>
+      <button class="btn" onclick="grvClearRows()" style="opacity:.6;">🗑 Clear</button>
     </div>
   </div>
 
   <table class="data-table" id="grvTable">
     <thead>
       <tr>
+        <th>Warehouse</th>
         <th>BOL</th>
         <th>PO Number</th>
         <th>Customer</th>
@@ -1373,7 +1376,7 @@
       </tr>
     </thead>
     <tbody id="grvTbody">
-      <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px;font-family:var(--mono);font-size:12px;">No data yet — ask Claude to populate from GRV</td></tr>
+      <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px;font-family:var(--mono);font-size:12px;">No data yet — ask Claude to populate from GRV</td></tr>
     </tbody>
   </table>
 </div>
@@ -4097,11 +4100,30 @@ function switchTab(tab) {
 }
 
 // ─── GRV MESSAGING ────────────────────────────────────────────────────────────
+function grvStartWarehouse(warehouse) {
+  var msg = 'Run GRV ' + warehouse + ' workflow. '
+    + 'RULES: (1) Never close or navigate away from the GRV tab — open MGMT and Google Sheets in new tabs instead, otherwise the session expires and I have to log in again. '
+    + '(2) Only process INS rows with exactly 9-digit PO numbers. '
+    + '(3) Output should be a dated Excel file saved to the outputs folder.';
+  if (typeof window.sendPrompt === 'function') {
+    window.sendPrompt(msg);
+  } else {
+    navigator.clipboard.writeText(msg).then(function() {
+      var btn = event.currentTarget;
+      var orig = btn.textContent;
+      btn.textContent = '✓ Copied!';
+      setTimeout(function() { btn.textContent = orig; }, 2000);
+    }).catch(function() {
+      alert('Please type in Claude chat: ' + msg);
+    });
+  }
+}
+
 function grvSetRows(rows) {
-  // rows: array of { bol, po, customer, spec, qty, mpn, itemCode, description }
+  // rows: array of { warehouse, bol, po, customer, spec, qty, mpn, itemCode, description }
   const tbody = document.getElementById('grvTbody');
   if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px;font-family:var(--mono);font-size:12px;">No INS rows found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px;font-family:var(--mono);font-size:12px;">No INS rows found</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((r, i) => {
@@ -4112,7 +4134,11 @@ function grvSetRows(rows) {
                       hasMpn   ? '<span style="color:var(--amber)">&#9679;</span>' :
                                  '<span style="color:var(--muted)">&#9679;</span>';
     const copyBtn  = hasItem ? '<button class="btn-copy" onclick="grvCopy(this,' + i + ')">Copy</button>' : '';
+    const wh = r.warehouse || '—';
+    const whColor = wh === 'Coventry' ? 'var(--blue,#4f6ef7)' : wh === 'Dreiech' ? 'var(--green,#22c55e)' : 'var(--muted)';
+    const whBadge = '<span style="font-size:10px;font-weight:600;color:' + whColor + ';text-transform:uppercase;letter-spacing:.5px;">' + wh + '</span>';
     return '<tr>' +
+      '<td style="white-space:nowrap;">' + whBadge + '</td>' +
       '<td style="font-family:var(--mono);font-size:11px;">' + (r.bol||'—') + '</td>' +
       '<td style="font-family:var(--mono);font-size:12px;">' + (r.po||'—') + '</td>' +
       '<td><strong>' + (r.customer||'—') + '</strong></td>' +
@@ -4140,7 +4166,7 @@ function grvCopy(btn, idx) {
 function grvClearRows() {
   window._grvRows = [];
   const tbody = document.getElementById('grvTbody');
-  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px;font-family:var(--mono);font-size:12px;">No data yet — ask Claude to populate from GRV</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:32px;font-family:var(--mono);font-size:12px;">No data yet — ask Claude to populate from GRV</td></tr>';
 }
 
 // ─── ADIL'S DASHBOARD (embedded via iframe srcdoc) ────────────────────────────
@@ -4207,6 +4233,10 @@ document.addEventListener('DOMContentLoaded', () => {
   wireMsCheckboxes(document.getElementById('cs-statusMenu'));
   // Initialise the live-inventory org picker (will show "no orgs yet" until orders load)
   if (typeof liveInvPopulateOrgPicker === 'function') liveInvPopulateOrgPicker();
+  // Auto-populate GRV table if data has been embedded by Claude
+  if (typeof window._grvPreloadData !== 'undefined' && window._grvPreloadData.length) {
+    grvSetRows(window._grvPreloadData);
+  }
 });
 
 function wireMsCheckboxes(menu) {
@@ -5614,6 +5644,123 @@ document.body.insertAdjacentHTML('beforeend',
   '<button class="kd-close" onclick="kdClose()">&#x2715;</button>' +
   '</div><div class="kd-modal-body" id="kd-modal-body"></div>' +
   '</div></div>');
+</script>
+
+<script>
+// ── GRV Coventry data – auto-populated 2026-05-07 ──────────────────────────
+// Stored as a global variable; DOMContentLoaded handler above will call grvSetRows()
+window._grvPreloadData = [
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012635217909',
+        po: '100013578',
+        customer: 'NEO4J',
+        spec: 'MBP 16" M5 MAX 18C CPU 40C GPU 64GB 2TB',
+        qty: 2,
+        mpn: 'Z1N25M184064214W-UK',
+        itemCode: 'd244bbc1-f8ec-4b73-93ce-a8391a24c8dd',
+        description: 'MacBook Pro 16-inch M5 Max 18-Core CPU 40-Core GPU 64GB RAM 2TB SSD - UK English KB - Space Black - UK Plug - 140W'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012635219909',
+        po: '100013588',
+        customer: 'NEO4J',
+        spec: 'MBP 16" M5 MAX 18C CPU 40C GPU 64GB 2TB',
+        qty: 2,
+        mpn: 'Z1N25M184064214W-UK',
+        itemCode: 'd244bbc1-f8ec-4b73-93ce-a8391a24c8dd',
+        description: 'MacBook Pro 16-inch M5 Max 18-Core CPU 40-Core GPU 64GB RAM 2TB SSD - UK English KB - Space Black - UK Plug - 140W'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012637447901',
+        po: '100013782',
+        customer: 'STACKADAPT',
+        spec: 'MBP 16" M5 PRO 18C CPU 20C GPU 24GB 1TB',
+        qty: 4,
+        mpn: 'MGEA4B/A',
+        itemCode: 'c0eef22f-438a-4110-b022-8f0c2d1bb2e2',
+        description: 'MacBook Pro 16-inch M5 Pro 18-Core CPU 20-Core GPU 24GB RAM 1TB SSD - UK English KB - Space Black - Power Adapter Not Included'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012637447901',
+        po: '100013782',
+        customer: 'STACKADAPT',
+        spec: 'MBP 14" M5 10C CPU 10C GPU 24GB 1TB',
+        qty: 3,
+        mpn: 'MDE34B/A',
+        itemCode: '92896d45-cba9-4deb-9332-2a85d338be05',
+        description: 'MacBook Pro 14-inch M5 10-Core CPU 10-Core GPU 24GB RAM 1TB SSD - UK English KB - Space Black - Power Adapter Not Included'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012637447901',
+        po: '100013782',
+        customer: 'STACKADAPT',
+        spec: 'MBA 13" M5 10C CPU 10C GPU 24GB 1TB',
+        qty: 7,
+        mpn: 'MDHG4B/A',
+        itemCode: 'f257a0c6-69c6-4a6e-b842-732c93e416c8',
+        description: 'MacBook Air 13-inch M5 10-Core CPU 10-Core GPU 24GB RAM 1TB SSD - UK English KB - Midnight - Power Adapter Not Included'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012637481292',
+        po: '100013730',
+        customer: 'STACKADAPT',
+        spec: 'MBP 16" M5 PRO 18C CPU 20C GPU 48GB 1TB',
+        qty: 3,
+        mpn: 'MGEC4B/A',
+        itemCode: 'ed5b4922-5894-43e4-bd72-fb4318cc6ffc',
+        description: 'MacBook Pro 16-inch M5 Pro 18-Core CPU 20-Core GPU 48GB RAM 1TB SSD - UK English KB - Space Black - Power Adapter Not Included'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012638380549',
+        po: '100013782',
+        customer: 'CRESTA',
+        spec: 'MBP 14" M5 PRO 15C CPU 16C GPU 24GB 1TB',
+        qty: 3,
+        mpn: 'MGDR4B/A',
+        itemCode: '5bce6e3b-889d-4e98-bef6-6580a8fd669b',
+        description: 'MacBook Pro 14-inch M5 Pro 15-Core CPU 16-Core GPU 24GB RAM 1TB SSD - UK English KB - Space Black - Power Adapter Not Included'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012638415980',
+        po: '100013743',
+        customer: 'WISE',
+        spec: 'LOGITECH PEBBLE KEYS 2 K380S UK KEYBOARD',
+        qty: 11,
+        mpn: '920-011843',
+        itemCode: '76d16815-2fad-421a-ade1-b4acf1c9f00f',
+        description: 'Pebble Keys 2 K380S Wireless Keyboard - British / Irish - Tonal Graphite'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012638415980',
+        po: '100013743',
+        customer: 'WISE',
+        spec: 'LOGITECH M720 OPTICAL MOUSE',
+        qty: 11,
+        mpn: '910-004791',
+        itemCode: '352c1e5b-903e-4fa2-9228-25a5837102a5',
+        description: 'M720 Wireless Mouse (UK/EU)'
+      },
+      {
+        warehouse: 'Coventry',
+        bol: 'JJD014600012638415980',
+        po: '100013743',
+        customer: 'WISE',
+        spec: 'BELKIN 108W 4 PORT USB DESKTOP CHARGER',
+        qty: 11,
+        mpn: 'X200ABA',
+        itemCode: '252d4d84-f67d-4f26-a70c-10880f2f1b1c',
+        description: '108W 4-Port Power Adapter - 2M'
+      }
+];
 </script>
 </body>
 </html>
