@@ -817,7 +817,6 @@
         <label class="ms-option"><input type="checkbox" value="SHIPPED" onchange="invRenderTable()"> Shipped</label>
         <label class="ms-option"><input type="checkbox" value="ARRIVED_AT_PROCESSING_FACILITY" onchange="invRenderTable()"> At Facility</label>
         <label class="ms-option"><input type="checkbox" value="PARTIALLY_RECEIVED" onchange="invRenderTable()"> Partially Received</label>
-        <label class="ms-option"><input type="checkbox" value="RECEIVED" onchange="invRenderTable()"> Received</label>
       </div>
     </div>
   </div>
@@ -2906,7 +2905,7 @@ async function invFetchFromAPI() {
           query: invGqlQuery,
           variables: {
             paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] },
-            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'PARTIALLY_RECEIVED', 'RECEIVED'], firstbaseSupplied: true }
+            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'PARTIALLY_RECEIVED'], firstbaseSupplied: true }
           }
         })
       });
