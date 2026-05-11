@@ -1289,36 +1289,28 @@
     </div>
   </div>
 
-  <!-- Missed SLO completions chart -->
+  <!-- Missed SLO chart (combined: by warehouse / week / month / customer) -->
   <div class="kpi-chart-card" style="margin-bottom:24px;">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
       <div>
-        <div class="kpi-chart-title" id="kpiMissedTitle">Missed SLO completions</div>
+        <div class="kpi-chart-title" id="kpiMissedTitle">Missed SLO</div>
         <div class="kpi-chart-subtitle" id="kpiMissedSubtitle">Completed orders that took &gt; 2 business days · respects warehouse filter above</div>
       </div>
-      <select id="kpiMissedGranularity" onchange="kpiDashRender()" style="align-self:center;">
-        <option value="warehouse" selected>By warehouse</option>
-        <option value="week">By week</option>
-        <option value="month">By month</option>
-      </select>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="kpiMissedGranularity" onchange="kpiMissedOnChange()" style="align-self:center;">
+          <option value="warehouse" selected>By warehouse</option>
+          <option value="week">By week</option>
+          <option value="month">By month</option>
+          <option value="customer">By customer</option>
+        </select>
+        <select id="kpiMissedCustLimit" onchange="kpiDashRender()" style="align-self:center;display:none;">
+          <option value="10" selected>Top 10</option>
+          <option value="20">Top 20</option>
+          <option value="all">All customers</option>
+        </select>
+      </div>
     </div>
     <div class="kpi-chart-canvas-wrap"><canvas id="kpiMissedChart"></canvas></div>
-  </div>
-
-  <!-- Missed SLO by customer chart -->
-  <div class="kpi-chart-card" style="margin-bottom:24px;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
-      <div>
-        <div class="kpi-chart-title" id="kpiMissedCustTitle">Missed SLO by customer</div>
-        <div class="kpi-chart-subtitle" id="kpiMissedCustSubtitle">Completed orders that took &gt; 2 business days, grouped by customer · respects window/warehouse filters</div>
-      </div>
-      <select id="kpiMissedCustLimit" onchange="kpiDashRender()" style="align-self:center;">
-        <option value="10" selected>Top 10</option>
-        <option value="20">Top 20</option>
-        <option value="all">All customers</option>
-      </select>
-    </div>
-    <div class="kpi-chart-canvas-wrap"><canvas id="kpiMissedCustChart"></canvas></div>
   </div>
 
   <div class="kpi-table-wrap">
@@ -2010,7 +2002,6 @@ let kpiDashLoading = false;
 let kpiTrendChartObj = null;
 let kpiHistChartObj = null;
 let kpiMissedChartObj = null;
-let kpiMissedCustChartObj = null;
 
 function kpiDashSetStatus(text) {
   const el = document.getElementById('kpiDashStatus');
@@ -2191,7 +2182,6 @@ function kpiDashRender() {
   kpiRenderTrendChart(rows);
   kpiRenderHistogram(rows);
   kpiRenderMissedSloChart(rows);
-  kpiRenderMissedByCustomerChart(rows);
   kpiRenderBreachTable(rows);
   kpiRenderWarehouseTable(rows);
 }
@@ -2419,42 +2409,95 @@ function kpiRenderHistogram(rows) {
   });
 }
 
-// ─── Missed SLO chart ────────────────────────────────────────────────────────
-// Bar chart of completed orders that took longer than the SLO. Three views:
-//   "warehouse" — bars per warehouse (default; honours warehouse filter above)
-//   "week"      — missed-SLO completions bucketed by ISO week of completion
-//   "month"     — missed-SLO completions bucketed by month of completion
-// Tracker leg (shipped → at facility) has no SLO, so this chart shows an empty
-// state explaining there's nothing to render.
+// ─── Missed SLO chart (combined: warehouse / week / month / customer) ──────────
+function kpiMissedOnChange() {
+  var granSel  = document.getElementById('kpiMissedGranularity');
+  var custSel  = document.getElementById('kpiMissedCustLimit');
+  if (granSel && custSel) {
+    custSel.style.display = granSel.value === 'customer' ? '' : 'none';
+  }
+  kpiDashRender();
+}
+
 function kpiRenderMissedSloChart(rows) {
   const ctx = document.getElementById('kpiMissedChart');
   if (!ctx || typeof Chart === 'undefined') return;
 
-  const cfg = kpiGetLegConfig();
+  const cfg         = kpiGetLegConfig();
   const granularity = (document.getElementById('kpiMissedGranularity') || {}).value || 'warehouse';
-  const titleEl = document.getElementById('kpiMissedTitle');
-  const subEl   = document.getElementById('kpiMissedSubtitle');
+  const titleEl     = document.getElementById('kpiMissedTitle');
+  const subEl       = document.getElementById('kpiMissedSubtitle');
 
-  // Tracker leg has no SLO concept — wipe the chart and show a hint.
   if (!cfg.hasSlo) {
-    if (titleEl) titleEl.textContent = 'Missed SLO completions';
+    if (titleEl) titleEl.textContent = 'Missed SLO';
     if (subEl)   subEl.textContent   = 'Not applicable on the Shipped → At facility leg (no SLO).';
     if (kpiMissedChartObj) { kpiMissedChartObj.destroy(); kpiMissedChartObj = null; }
     return;
   }
 
-  if (subEl) {
-    if (granularity === 'warehouse') {
-      subEl.textContent = 'Completed orders that took > 2 business days · grouped by warehouse · respects window/warehouse filters';
-    } else if (granularity === 'month') {
-      subEl.textContent = 'Completed orders that took > 2 business days · grouped by month of completion';
-    } else {
-      subEl.textContent = 'Completed orders that took > 2 business days · grouped by ISO week of completion';
-    }
-  }
-  if (titleEl) titleEl.textContent = 'Missed SLO completions';
+  if (titleEl) titleEl.textContent = 'Missed SLO';
 
-  // Filter to completed orders that breached SLO.
+  // ── By customer ──────────────────────────────────────────────────────────────
+  if (granularity === 'customer') {
+    const limitSel = document.getElementById('kpiMissedCustLimit');
+    const limit    = limitSel ? limitSel.value : '10';
+
+    const byCust = {};
+    rows.forEach(r => {
+      if (!cfg.hasData(r)) return;
+      const v = cfg.getValue(r);
+      if (v === null || isNaN(v)) return;
+      if (cfg.sloMet(r, v) !== 'no') return;
+      const cust = (r.organization || '(unknown)').trim() || '(unknown)';
+      byCust[cust] = (byCust[cust] || 0) + 1;
+    });
+
+    let entries = Object.entries(byCust).sort((a, b) => b[1] - a[1]);
+    const totalCustomers = entries.length;
+    const totalMissed    = entries.reduce((s, e) => s + e[1], 0);
+    if (limit !== 'all') entries = entries.slice(0, parseInt(limit, 10));
+
+    const labels = entries.map(e => e[0]);
+    const counts = entries.map(e => e[1]);
+
+    if (subEl) {
+      subEl.textContent = `Completed orders that took > 2 business days, grouped by customer · ${entries.length} of ${totalCustomers} customer${totalCustomers === 1 ? '' : 's'} · ${totalMissed} missed total`;
+    }
+
+    if (kpiMissedChartObj) kpiMissedChartObj.destroy();
+
+    if (labels.length === 0) {
+      kpiMissedChartObj = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: ['No missed orders'], datasets: [{ label: 'Missed', data: [0], backgroundColor: 'rgba(156,163,175,0.5)' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+      });
+      return;
+    }
+
+    kpiMissedChartObj = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: 'Missed SLO', data: counts, backgroundColor: 'rgba(220,38,38,0.85)', borderColor: '#dc2626', borderWidth: 1 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => `${c.parsed.x} missed order${c.parsed.x === 1 ? '' : 's'}` } }
+        },
+        scales: {
+          x: { title: { display: true, text: 'Missed SLO orders' }, ticks: { precision: 0 }, beginAtZero: true },
+          y: { ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+    return;
+  }
+
+  // ── By warehouse / week / month ──────────────────────────────────────────────
   const missed = rows.filter(r => {
     if (!cfg.hasData(r)) return false;
     const v = cfg.getValue(r);
@@ -2472,6 +2515,7 @@ function kpiRenderMissedSloChart(rows) {
     labels = entries.map(e => e[0]);
     counts = entries.map(e => e[1]);
     xLabel = 'Warehouse';
+    if (subEl) subEl.textContent = 'Completed orders that took > 2 business days · grouped by warehouse · respects window/warehouse filters';
   } else {
     const isMonth = granularity === 'month';
     const byBucket = {};
@@ -2485,21 +2529,17 @@ function kpiRenderMissedSloChart(rows) {
     labels = keys.map(k => kpiFormatBucketLabel(k, isMonth ? 'month' : 'week'));
     counts = keys.map(k => byBucket[k]);
     xLabel = isMonth ? 'Month' : 'Week';
+    if (subEl) subEl.textContent = `Completed orders that took > 2 business days · grouped by ${isMonth ? 'month' : 'ISO week'} of completion`;
   }
 
   if (kpiMissedChartObj) kpiMissedChartObj.destroy();
 
   if (labels.length === 0) {
-    // Render an empty chart so the canvas still draws an axis with a clear "no data" note in subtitle.
     if (subEl) subEl.textContent += ' · no missed-SLO orders in this window';
     kpiMissedChartObj = new Chart(ctx, {
       type: 'bar',
       data: { labels: ['No missed orders'], datasets: [{ label: 'Missed', data: [0], backgroundColor: 'rgba(156,163,175,0.5)' }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-      }
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
     });
     return;
   }
@@ -2508,13 +2548,7 @@ function kpiRenderMissedSloChart(rows) {
     type: 'bar',
     data: {
       labels,
-      datasets: [{
-        label: 'Missed SLO',
-        data: counts,
-        backgroundColor: 'rgba(220,38,38,0.85)',
-        borderColor: '#dc2626',
-        borderWidth: 1
-      }]
+      datasets: [{ label: 'Missed SLO', data: counts, backgroundColor: 'rgba(220,38,38,0.85)', borderColor: '#dc2626', borderWidth: 1 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -2523,120 +2557,19 @@ function kpiRenderMissedSloChart(rows) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (items) => {
-              if (!items.length) return '';
-              const lbl = items[0].label;
-              return Array.isArray(lbl) ? lbl.join(' · ') : lbl;
-            },
-            label: (ctx) => `${ctx.parsed.x ?? ctx.parsed.y} order${(ctx.parsed.x ?? ctx.parsed.y) === 1 ? '' : 's'}`
+            title: (items) => { if (!items.length) return ''; const lbl = items[0].label; return Array.isArray(lbl) ? lbl.join(' · ') : lbl; },
+            label: (c) => `${c.parsed.x ?? c.parsed.y} order${(c.parsed.x ?? c.parsed.y) === 1 ? '' : 's'}`
           }
         }
       },
       scales: granularity === 'warehouse'
-        ? {
-            x: { title: { display: true, text: 'Missed SLO orders' }, ticks: { precision: 0 }, beginAtZero: true },
-            y: { title: { display: false }, ticks: { font: { size: 11 } } }
-          }
-        : {
-            x: { title: { display: true, text: xLabel }, ticks: { font: { size: 11 } } },
-            y: { title: { display: true, text: 'Missed SLO orders' }, ticks: { precision: 0 }, beginAtZero: true }
-          }
+        ? { x: { title: { display: true, text: 'Missed SLO orders' }, ticks: { precision: 0 }, beginAtZero: true }, y: { ticks: { font: { size: 11 } } } }
+        : { x: { title: { display: true, text: xLabel }, ticks: { font: { size: 11 } } }, y: { title: { display: true, text: 'Missed SLO orders' }, ticks: { precision: 0 }, beginAtZero: true } }
     }
   });
 }
 
-// ─── Missed SLO by customer chart ────────────────────────────────────────────
-// Horizontal bar chart of completed orders that breached SLO, grouped by
-// `organization` (customer). Honours window + warehouse filters. Top-N selector
-// keeps the chart readable when there are many customers.
-function kpiRenderMissedByCustomerChart(rows) {
-  const ctx = document.getElementById('kpiMissedCustChart');
-  if (!ctx || typeof Chart === 'undefined') return;
 
-  const cfg = kpiGetLegConfig();
-  const limitSel = document.getElementById('kpiMissedCustLimit');
-  const limit = limitSel ? limitSel.value : '10';
-  const titleEl = document.getElementById('kpiMissedCustTitle');
-  const subEl   = document.getElementById('kpiMissedCustSubtitle');
-
-  if (!cfg.hasSlo) {
-    if (subEl) subEl.textContent = 'Not applicable on the Shipped → At facility leg (no SLO).';
-    if (kpiMissedCustChartObj) { kpiMissedCustChartObj.destroy(); kpiMissedCustChartObj = null; }
-    return;
-  }
-
-  // Aggregate missed-SLO orders by customer.
-  const byCust = {};
-  rows.forEach(r => {
-    if (!cfg.hasData(r)) return;
-    const v = cfg.getValue(r);
-    if (v === null || isNaN(v)) return;
-    if (cfg.sloMet(r, v) !== 'no') return;
-    const cust = (r.organization || '(unknown)').trim() || '(unknown)';
-    byCust[cust] = (byCust[cust] || 0) + 1;
-  });
-
-  let entries = Object.entries(byCust).sort((a, b) => b[1] - a[1]);
-  const totalCustomers = entries.length;
-  if (limit !== 'all') {
-    const n = parseInt(limit, 10);
-    entries = entries.slice(0, n);
-  }
-  const labels = entries.map(e => e[0]);
-  const counts = entries.map(e => e[1]);
-
-  if (subEl) {
-    const showing = entries.length;
-    const totalMissed = Object.values(byCust).reduce((a, b) => a + b, 0);
-    subEl.textContent = `Completed orders that took > 2 business days, grouped by customer · ${showing} of ${totalCustomers} customer${totalCustomers === 1 ? '' : 's'} · ${totalMissed} missed order${totalMissed === 1 ? '' : 's'} total`;
-  }
-  if (titleEl) titleEl.textContent = 'Missed SLO by customer';
-
-  if (kpiMissedCustChartObj) kpiMissedCustChartObj.destroy();
-
-  if (labels.length === 0) {
-    kpiMissedCustChartObj = new Chart(ctx, {
-      type: 'bar',
-      data: { labels: ['No missed orders'], datasets: [{ label: 'Missed', data: [0], backgroundColor: 'rgba(156,163,175,0.5)' }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-      }
-    });
-    return;
-  }
-
-  kpiMissedCustChartObj = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Missed SLO',
-        data: counts,
-        backgroundColor: 'rgba(220,38,38,0.85)',
-        borderColor: '#dc2626',
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      indexAxis: 'y',
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => `${ctx.parsed.x} missed order${ctx.parsed.x === 1 ? '' : 's'}`
-          }
-        }
-      },
-      scales: {
-        x: { title: { display: true, text: 'Missed SLO orders' }, ticks: { precision: 0 }, beginAtZero: true },
-        y: { title: { display: false }, ticks: { font: { size: 11 } } }
-      }
-    }
-  });
-}
 
 function kpiRenderBreachTable(rows) {
   const tbody = document.querySelector('#kpiBreachTable tbody');
