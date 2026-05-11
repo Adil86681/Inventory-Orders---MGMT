@@ -296,9 +296,25 @@
     display: none;
   }
   .ms-dropdown.open { display: block; }
+  /* Customer dropdowns: cap visible list at ~10 rows and make it scrollable */
+  #inv-customerMenu, #cs-customerMenu {
+    max-height: 340px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  #inv-customerMenu::-webkit-scrollbar,
+  #cs-customerMenu::-webkit-scrollbar { width: 8px; }
+  #inv-customerMenu::-webkit-scrollbar-thumb,
+  #cs-customerMenu::-webkit-scrollbar-thumb {
+    background: var(--border2); border-radius: 4px;
+  }
+  #inv-customerMenu::-webkit-scrollbar-thumb:hover,
+  #cs-customerMenu::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  #inv-customerMenu::-webkit-scrollbar-track,
+  #cs-customerMenu::-webkit-scrollbar-track { background: transparent; }
   .ms-option {
     display: flex; align-items: center; gap: 9px; padding: 8px 14px;
-    font-size: 13px; font-family: var(--sans); color: var(--text2);
+    font-size: 13px; line-height: 18px; font-family: var(--sans); color: var(--text2);
     cursor: pointer; transition: background 0.1s; white-space: nowrap; user-select: none;
   }
   .ms-option:hover { background: var(--surface3); color: var(--text); }
