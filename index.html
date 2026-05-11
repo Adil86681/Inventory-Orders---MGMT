@@ -5955,7 +5955,7 @@ function grvClearRows() {
         const data = await gql(
           `query($orgId:ID!,$pn:Int!,$ps:Int!,$f:OrderFilter){
              getOrganizationById(orgId:$orgId){
-               orders(pagingAndSorting:{pageNumber:$pn,pageSize:200,sort:{field:"createdAt",direction:"DESC"}} filter:$f){
+               orders(pagingAndSorting:{pageNumber:$pn,pageSize:200,sort:{field:"createdAt",direction:DESC}} filter:$f){
                  totalElements totalPages
                  data{id orderStatus createdAt}
                }
@@ -6088,11 +6088,3 @@ function grvClearRows() {
       (i.category||'').toLowerCase().includes(q) ||
       (i.brand||'').toLowerCase().includes(q) ||
       (i.vendorSku||'').toLowerCase().includes(q) ||
-      (i.alternativeMpn||'').toLowerCase().includes(q)
-    ));
-  };
-})();
-</script>
-
-</body>
-</html>
