@@ -6812,4 +6812,15 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
         + '<td style="text-align:center;font-family:var(--mono)">' + d.maxQuantity + '</td>'
         + '<td style="text-align:center;font-family:var(--mono);color:'+recMinColor+'">' + recMinStr + '</td>'
         + '<td style="text-align:center;font-family:var(--mono);color:'+recMaxColor+'">' + recMaxStr + '</td>'
-        + '<td style="text-align:center;font-family:var(--mono)">' + d.
+        + '<td style="text-align:center;font-family:var(--mono)">' + d.onHand + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono)">' + trailing + '</td>'
+        + '<td>' + irRecBadge(d.rec) + '</td>'
+        + '<td style="color:var(--muted);font-size:11px;max-width:200px;white-space:normal">' + (d.why || '') + '</td>'
+        + '</tr>';
+    }).join('');
+  };
+
+})();
+</script>
+</body>
+</html>
