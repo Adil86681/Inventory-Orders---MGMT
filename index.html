@@ -6353,6 +6353,11 @@ function grvClearRows() {
 
 <script>
 // ─── INVENTORY REVIEW TAB ────────────────────────────────────────────────────
+
+// ─── WISE TRAILING 12MO ORDERS (embedded from MGMT, keyed by inventory level ID) ──
+var _WISE_TRAILING_COUNTS = {"de7fea13-a098-4666-88fa-e75222626c0b":12,"870c50ea-a341-4672-b2d8-d3b8c9dee06d":125,"a95cb642-02a1-4b4d-a58a-0e7ed3f81a88":15,"f23aef1e-bfbf-4c3a-9951-1aa9ab397258":5,"6b0ff7a2-18b2-4533-8407-7d2a01b7ad26":33,"4a9751e2-09eb-4046-b0b9-ce9c2ac1de27":50,"ce345df6-a5b3-4496-8f2a-101185a70a53":21,"57d3daf3-3a71-41f7-8b7e-c37d104dc942":15,"2360cbea-4531-4c6e-8735-826bb7300b94":17,"e8d11ab2-ce7a-4518-a271-110e33ce4fe1":18,"6b7f8acd-aeb7-4412-a578-871980d60086":8,"b432ca7a-87e1-491c-9cd5-992a91d55753":22,"f120cae6-e422-48ca-a9ae-24aad14b29f3":14,"9d24655b-e5c7-4d40-963e-c4c024a5cdad":8,"edb226f3-715d-4335-838d-6a9fe67de792":10,"0c60e6c7-834c-4d5e-8355-0aff657d6fd2":0,"3982615e-646d-49ad-9883-32eef32cbaa8":0,"aee25e85-e4fb-4241-bf2f-3baf2abd4d2b":0,"68f36bbc-447b-4ccd-92ae-3aff43a92d41":7,"6c6d5506-d2b0-4208-b1ca-51cbeecfb4fd":10,"ce5b2bfa-8e5f-4c23-b74a-4bef9b9b3589":0,"6ea823f4-c2e7-4819-8951-465850a363d8":145,"eb587ccc-6123-4db8-aca4-aa18e4850151":8,"2abc2c27-e664-49bb-bebc-e8825998f3d6":48,"34ce5d7e-e940-425b-bdb7-3cfd3cc71cbe":64,"93bcdafd-09f1-4966-9ef8-1eb086cdedb1":22,"61f76aa5-3d95-4c4f-8842-9ef73d68190a":118,"f4309b8a-e047-4c69-af5a-becc017524b0":477,"eb2ce620-228c-44aa-abe9-cd3ecb471017":2,"de1e9241-c3c0-4abe-b0cc-c855fb8fc29e":45,"02bdb638-a6cd-4cf1-929f-51145aae4adb":184,"493b0c91-16b4-459a-b040-68d7740631fd":9,"6ead1b34-f249-43d7-8c45-5354de59d5da":92,"a78d3f0d-e88a-4a58-b7e5-91351d8be43b":3,"b6853a2a-84c5-45c3-ba14-45b227d37c09":9,"88ec18ea-b6f7-4482-bd86-b57068fa563c":17,"bf32be52-2fad-4bbf-9e0c-67c3f6e5946b":633,"3a5a7de4-c235-4f5b-beb1-fcecb5e6ba7a":42,"9194e957-75c8-448d-99ce-1523872c4cf2":1,"f98d0ae6-9cdc-4bac-81d2-a971b581b13b":0,"4e4e8411-ddba-4d79-821e-f1a84bef1465":32,"76ce11ee-543f-4c41-885f-9e329fc7915e":31,"116c1f46-7c48-4cf9-b2c2-fbeb0c4a5802":143,"668f5ee3-03c0-415f-8735-0dcd123afec6":568,"dbf8f526-157e-4343-928f-ebf2d59a1525":39,"87e56010-b02a-4dbe-bb30-aef3714a13eb":5,"d2da83e4-10bd-4288-bc46-ea00d9e37f50":10,"4634a6b2-5754-497a-8f4b-d41d92cd68bd":0,"d4891c97-9c5f-4ffe-a406-723dd66fe77b":14,"9ecfeb79-0c75-440e-8d9b-b8e71e978dde":5,"251a37b0-59d6-4792-b45a-2bb8dc7a7c9b":28,"be1fc949-b9b5-420d-b09f-b9375e66087a":36,"473d528e-f200-4941-b1d1-509bcf6aaec3":7,"7a734f80-e946-42ab-ae71-2cfd6ddeab98":66,"040ea7ad-0f71-416c-badd-6370dbb1164d":0,"21704717-7ff5-4734-bf40-8c10688feadc":16,"b41e3a37-1f74-4303-8d7a-7709d26921b8":53,"d31c9268-7a9f-45ac-be27-bba73a41e6ae":0,"f4da2866-db72-412a-998c-e0339ce86c8e":73,"56d21cd8-70b5-43a3-85b0-7ae0e1911217":39,"654c924b-e8d5-444f-a1ec-94acb35ab40c":301,"75766d37-91e2-428f-b9a6-5edfdfbf82ed":3,"c0b07d7d-bbba-49ac-83d6-6714dfdd5291":638,"d32f85f2-9da1-4f57-8fa3-ca6b72330517":25,"e4d39b96-c1f3-4bbc-a6e6-6a7ee921963c":200,"acf7b789-c607-4e46-ac60-5f6ddf590438":638,"e0d8b14f-d87f-4fd9-b6f9-0b53c1490f32":0,"0cc34f64-9b80-4787-8718-cc56e380a587":10,"168f8c11-9ae4-4751-a078-a35e0a9f0ff1":0,"8a1ad36c-2939-4d86-8965-44e3e8d3966b":0,"d7d7da4a-1817-4f80-b967-49aa3d59da50":0,"e5d970d3-7604-4071-a9cc-132d827cf589":0,"e3f97189-c1a7-4eb9-a2cc-d8510bfa33e4":75,"78f3260a-0d05-4c9b-940d-c59074f555a9":0,"41876569-b788-4cf6-9e65-087f0181ec9d":0,"9d124f87-1c2b-4e6b-b0c4-5d64715c484c":9,"dac31f9f-1083-4f2a-b179-4a754b0c5260":11,"cf27480d-fa0a-4c1c-847e-11d886ff5211":0,"23cb6de4-b33b-49b6-b0cb-4c0fe1a0e807":0,"6ea4bd53-ddcc-422e-a62c-1bbd00e41f6a":0,"8dcea060-5733-4582-b22e-4f8dd01057de":5,"6d2c3386-b71f-45a7-9137-191edb222db1":4,"0c3bc0be-810c-4140-8c7c-cd8059b58e20":10,"3030b995-5828-4649-8beb-7ecfe0931b68":243,"b72369b8-b9f7-451f-8b79-0b92ccc4bfa8":174,"edf0d05d-43aa-4ca6-ab2e-76eee3da20cf":3,"f76d5869-aa9b-4864-9d9e-c99793c7529c":646,"11c36ccd-14be-4ce1-a03d-1c72675afe58":561,"5ebf5b26-d458-477f-90cd-f0721cd6d275":231,"1e7f4031-7d53-429c-addb-91bcca7c4f02":5,"e36bc6bc-d3ff-4130-b60b-96027fdf9541":5,"690cead9-ca9c-4adb-a9ba-cf95bf274469":57,"5d2834fe-8acb-423c-8469-481bca38420d":34,"c34c488f-b962-4760-9cf1-9e5281bd7c8d":22,"05e4f42a-999f-4e7d-abdf-977e484b9ecb":46,"2b676741-823a-4d88-aca5-6d24e3bb8da9":42,"037f8e9f-1960-41ab-8d39-9ba2e92c15f2":238,"97a9e5eb-b106-41d5-b118-f547cca15f4b":6,"3510ddf0-7530-4371-a020-32fae00bb225":86,"e13f44e1-fba7-4f60-9220-3482c4a84a39":0,"58f509e4-4596-4fc3-8b3f-70e7e2b24f2e":177,"9df38edf-3bfc-4840-8ac7-6e557513f8b7":100,"e059fb98-40c9-4e13-99c9-1c22d7b063da":11,"494d11e6-f0c6-4d1f-9b1b-c8ba998ca722":17,"0763e20f-b05b-486e-be37-35d41cc38550":91,"0b9925c8-c6a9-4908-83e6-edb1db2a6b52":0,"515b9e2f-c5f2-494c-9318-88be4d8ae8b7":2,"660748c7-e114-4a45-9446-6cbe93164d1f":1,"6d164791-dd6e-498b-919a-f82ff6f05974":27,"136f0612-fdad-453d-a3c3-6dd6fc9fe6a7":0,"8de6dcba-4bf5-488e-88e7-ebc0024f8040":0,"d5838607-dad1-454b-a99f-0bd14d5a45cc":0,"a52a281b-698b-4f83-aedc-39feb064708b":2,"b34367d6-6ce0-435e-b2ab-598bedbab499":22,"6242ddd9-ed73-4383-a436-38a6adc008d8":39,"ffa20e7c-c356-4c9f-b092-fb31a9e14ea7":5,"76d0520e-fcb3-4e6c-b71d-b8a80416e8eb":188,"1684d286-a8ba-417c-9392-c7a919b56599":15,"cb99af96-7810-404c-9c34-cd921a12a91f":0,"bd3aac1f-f4b9-4382-8e0e-7538bf0787eb":0,"c1d2c7e3-e929-4af2-998c-a0d9373be3bf":8,"2c094a0d-7e12-4ab8-8821-318b3831a8ab":10,"857011cb-7b1c-442e-96b1-6b516a715dbb":10,"12e24644-f995-4d6a-b538-c04302131dec":6,"2e4c738f-e8d1-4de3-b5c1-c350342dd152":0,"11cde953-c781-40e9-b00f-79e00a4a1dd4":153,"49ba72d5-26b7-4fcf-a74b-26291afcd275":17,"0f2fdff7-bc54-4919-9233-d60552ca1d18":9,"83f27088-ccd6-4fb1-9c7d-184453c2dddf":5,"8c620316-0b4c-4b5b-9301-e38dfcd0b5f9":2,"f37fc774-48f8-4c5c-88c9-9e56f0dcfb6f":13,"dd269e0e-b5f8-4336-aca8-e19a1b1a3f4c":0};
+var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
+
 (function() {
   const GQL = typeof API_GRAPHQL_URL !== 'undefined' ? API_GRAPHQL_URL : '/api/graphql';
   let irOrgId = null, irOrgName = null;
@@ -6385,8 +6390,13 @@ function grvClearRows() {
     return 'Tier 2';
   }
 
-  // ── Trailing orders from localStorage ────────────────────────────────────────
+  // ── Trailing orders: embedded Wise data + localStorage fallback ──────────────
   function irGetTrailing(id) {
+    // Check embedded Wise data first (works regardless of localStorage origin)
+    if (irOrgId === _WISE_ORG_ID && typeof _WISE_TRAILING_COUNTS[id] === 'number') {
+      return _WISE_TRAILING_COUNTS[id];
+    }
+    // Fallback: localStorage (works if dashboard is on same origin as mgmt)
     try {
       const tc = JSON.parse(localStorage.getItem('trailing_order_counts') || '{}');
       return typeof tc[id] === 'number' ? tc[id] : null;
@@ -6394,6 +6404,9 @@ function grvClearRows() {
   }
 
   function irHasTrailingCache() {
+    // Wise always has data via embedded constant
+    if (irOrgId === _WISE_ORG_ID) return true;
+    // Other clients: check localStorage
     try {
       return Object.keys(JSON.parse(localStorage.getItem('trailing_order_counts') || '{}')).length > 0;
     } catch(e) { return false; }
@@ -6799,16 +6812,4 @@ function grvClearRows() {
         + '<td style="text-align:center;font-family:var(--mono)">' + d.maxQuantity + '</td>'
         + '<td style="text-align:center;font-family:var(--mono);color:'+recMinColor+'">' + recMinStr + '</td>'
         + '<td style="text-align:center;font-family:var(--mono);color:'+recMaxColor+'">' + recMaxStr + '</td>'
-        + '<td style="text-align:center;font-family:var(--mono)">' + d.onHand + '</td>'
-        + '<td style="text-align:center;font-family:var(--mono)">' + trailing + '</td>'
-        + '<td>' + irRecBadge(d.rec) + '</td>'
-        + '<td style="font-size:11px;color:var(--text2);max-width:180px;white-space:normal">' + (d.why || '—') + '</td>'
-        + '</tr>';
-    }).join('');
-  };
-
-})();
-</script>
-
-</body>
-</html>
+        + '<td style="text-align:center;font-family:var(--mono)">' + d.
