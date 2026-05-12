@@ -732,6 +732,103 @@
 }
 .kpi-controls label { font-size: 12px; color: var(--text2); font-weight: 600; }
 
+/* ─── INVENTORY REVIEW TAB ───────────────────────────────────────────────── */
+.ir-subtab-nav {
+  display: flex; gap: 4px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--border); padding-bottom: 0;
+}
+.ir-subtab-btn {
+  padding: 8px 18px; font-size: 13px; font-weight: 600;
+  color: var(--text2); cursor: pointer; border: none; background: none;
+  border-bottom: 2px solid transparent; transition: all 0.15s; font-family: var(--sans);
+}
+.ir-subtab-btn:hover { color: var(--text); }
+.ir-subtab-btn.active { color: var(--accent2); border-bottom-color: var(--accent); }
+.ir-subtab-panel { display: none; }
+.ir-subtab-panel.active { display: block; }
+
+.ir-rec {
+  display: inline-flex; align-items: center; padding: 3px 9px;
+  border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.ir-rec-remove    { background:rgba(220,38,38,.12);  color:#dc2626; border:1px solid rgba(220,38,38,.3); }
+.ir-rec-increase  { background:rgba(217,119,6,.12);  color:#d97706; border:1px solid rgba(217,119,6,.3); }
+.ir-rec-reduce    { background:rgba(124,58,237,.12); color:#7c3aed; border:1px solid rgba(124,58,237,.3); }
+.ir-rec-autoorder { background:rgba(61,111,255,.12); color:var(--accent2); border:1px solid rgba(61,111,255,.3); }
+.ir-rec-nochange  { background:rgba(22,163,74,.08);  color:var(--green); border:1px solid rgba(22,163,74,.25); }
+
+.ir-obs-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 20px; margin-top: 20px;
+}
+.ir-obs-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.ir-obs-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ir-obs-list li {
+  font-size: 12px; color: var(--text2); padding: 7px 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; display: flex; align-items: flex-start; gap: 8px; line-height: 1.5;
+}
+.ir-obs-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+.ir-wh-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.ir-wh-btn {
+  padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text2); transition: all 0.15s;
+}
+.ir-wh-btn:hover { border-color: var(--accent); color: var(--accent2); }
+.ir-wh-btn.active { background: rgba(61,111,255,.12); border-color: var(--accent); color: var(--accent2); }
+
+.ir-stats-row {
+  display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 20px;
+}
+.ir-stat {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+}
+.ir-stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+.ir-stat-val { font-size: 22px; font-weight: 700; font-family: var(--mono); color: var(--text); }
+.ir-stat-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+.ir-summary-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ir-summary-table th {
+  padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
+  background: var(--surface2); border-bottom: 2px solid var(--border); white-space: nowrap;
+}
+.ir-summary-table th:not(:first-child) { text-align: center; }
+.ir-summary-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+.ir-summary-table td:not(:first-child):not(:nth-child(2)) { text-align: center; font-family: var(--mono); }
+.ir-summary-table tr:hover td { background: var(--surface2); }
+
+.ir-tier-1 {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  background: rgba(61,111,255,.12); color: var(--accent2); border: 1px solid rgba(61,111,255,.25);
+}
+.ir-tier-2 {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  background: rgba(124,58,237,.1); color: var(--purple); border: 1px solid rgba(124,58,237,.2);
+}
+
+.ir-trailing-note {
+  font-size: 11px; color: var(--muted); background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px;
+  font-family: var(--mono); white-space: nowrap;
+}
+.ir-trailing-note.has-data {
+  color: var(--green); border-color: rgba(22,163,74,.3); background: rgba(22,163,74,.05);
+}
+
+.ir-empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 64px 32px; text-align: center;
+}
+.ir-empty-icon { font-size: 52px; margin-bottom: 16px; }
+.ir-empty-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.ir-empty-sub { font-size: 14px; color: var(--text2); max-width: 420px; line-height: 1.6; }
+
 </style>
 
 <!-- Chart.js for the Inbound KPI dashboard -->
@@ -787,6 +884,9 @@
   </button>
   <button class="tab-btn" onclick="switchTab('clientAnalytics')" id="tabBtn-clientAnalytics">
     🏢 Client Analytics
+  </button>
+  <button class="tab-btn" onclick="switchTab('inventoryReview')" id="tabBtn-inventoryReview">
+    📊 Inventory Review
   </button>
 </div>
 
@@ -5848,8 +5948,140 @@ function grvClearRows() {
 
     </div>
   </div>
+
+<!-- ═══ INVENTORY REVIEW TAB ═══ -->
+<div class="tab-panel" id="panel-inventoryReview">
+<div class="app">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Inventory Review</h1>
+      <p id="ir-subtitle">Min/max analysis · reorder recommendations · warehouse breakdown</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" id="irLoadBtn" onclick="irLoad()" style="display:none">↺ Refresh</button>
+    </div>
+  </div>
+
+  <!-- Client search bar (reuses ca-* styles) -->
+  <div style="margin-bottom:16px">
+    <div class="ca-search-wrap">
+      <input type="text" id="irSearchInput" class="" style="width:100%;padding:9px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);font-size:13px;font-family:var(--sans);color:var(--text);outline:none;" placeholder="Search client by name…" autocomplete="off" />
+      <div class="ca-dropdown" id="irDropdown"></div>
+    </div>
+  </div>
+
+  <!-- Client badge -->
+  <div id="irClientBadge" style="display:none;align-items:center;gap:14px;margin-bottom:20px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;flex-wrap:wrap">
+    <div style="flex:1;min-width:200px">
+      <span id="irBadgeName" style="font-weight:700;font-size:14px;color:var(--text)"></span>
+      <span id="irBadgeId" style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:10px"></span>
+    </div>
+    <div id="irTrailingNote" class="ir-trailing-note">Trailing 12mo: checking…</div>
+    <button class="btn" style="font-size:12px;padding:5px 12px;border-color:var(--border)" onclick="irClear()">✕ Clear</button>
+  </div>
+
+  <!-- Empty state -->
+  <div id="irEmpty" class="ir-empty-state">
+    <div class="ir-empty-icon">📊</div>
+    <div class="ir-empty-title">Inventory Review</div>
+    <div class="ir-empty-sub">Search for a client above to load live inventory levels and generate min/max recommendations, powered by the Firstbase MGMT API.</div>
+  </div>
+
+  <!-- Main content -->
+  <div id="irContent" style="display:none">
+
+    <!-- Sub-tab nav -->
+    <div class="ir-subtab-nav">
+      <button class="ir-subtab-btn active" onclick="irSwitchSubtab('summary')">📋 Summary</button>
+      <button class="ir-subtab-btn" onclick="irSwitchSubtab('warehouse')">🏭 By Warehouse</button>
+    </div>
+
+    <!-- ── Summary sub-tab ── -->
+    <div class="ir-subtab-panel active" id="irPanel-summary">
+      <div id="irSummaryLoading" style="padding:48px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px">Loading inventory data from MGMT…</div>
+      <div id="irSummaryContent" style="display:none">
+
+        <!-- KPI stats -->
+        <div class="ir-stats-row" id="irStatsRow"></div>
+
+        <!-- Warehouse breakdown table -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:0">
+          <div style="padding:14px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px;font-weight:700;color:var(--text)">
+            🏭 Warehouse Summary
+          </div>
+          <div style="overflow-x:auto">
+            <table class="ir-summary-table" id="irSummaryTable">
+              <thead>
+                <tr>
+                  <th style="min-width:140px">Warehouse</th>
+                  <th>Tier</th>
+                  <th>SKUs</th>
+                  <th>Auto Order</th>
+                  <th>📈 Increase</th>
+                  <th>📉 Reduce</th>
+                  <th>🗑️ Remove</th>
+                  <th>🔄 Enable AO</th>
+                  <th>✅ No Change</th>
+                </tr>
+              </thead>
+              <tbody id="irSummaryBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Key observations -->
+        <div class="ir-obs-card">
+          <div class="ir-obs-title">💡 Key Observations</div>
+          <ul class="ir-obs-list" id="irObsList"></ul>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── By Warehouse sub-tab ── -->
+    <div class="ir-subtab-panel" id="irPanel-warehouse">
+      <div id="irWhLoading" style="padding:48px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:12px">Loading…</div>
+      <div id="irWhContent" style="display:none">
+
+        <div class="ir-wh-selector" id="irWhSelector"></div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div style="padding:10px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <span id="irWhTableTitle">—</span>
+            <input type="text" id="irWhFilter" placeholder="Filter by product, brand, SKU…" oninput="irRenderWhTable()"
+              style="font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);width:240px;outline:none;transition:border-color .15s" />
+          </div>
+          <div style="overflow-x:auto;max-height:580px;overflow-y:auto">
+            <table class="data-table" id="irWhTable" style="font-size:12px">
+              <thead>
+                <tr>
+                  <th>Brand</th>
+                  <th>Product</th>
+                  <th style="text-align:center">Auto Order</th>
+                  <th style="text-align:center">Min</th>
+                  <th style="text-align:center">Max</th>
+                  <th style="text-align:center">Rec. Min</th>
+                  <th style="text-align:center">Rec. Max</th>
+                  <th style="text-align:center">On Hand</th>
+                  <th style="text-align:center">Trailing 12mo</th>
+                  <th>Recommendation</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody id="irWhBody">
+                <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted)">Select a warehouse above</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /irContent -->
 </div>
 </div>
+
 
 <script>
 // ─── CLIENT ANALYTICS TAB ────────────────────────────────────────────────────
@@ -6116,5 +6348,465 @@ function grvClearRows() {
 
 })();
 </script>
+
+<script>
+// ─── INVENTORY REVIEW TAB ────────────────────────────────────────────────────
+(function() {
+  const GQL = typeof API_GRAPHQL_URL !== 'undefined' ? API_GRAPHQL_URL : '/api/graphql';
+  let irOrgId = null, irOrgName = null;
+  let irData = [];
+  let irSearchTimer = null;
+  let irCurrentWh = null;
+
+  // ── GQL helper ─────────────────────────────────────────────────────────────
+  async function irGql(q, vars) {
+    const r = await fetch(GQL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q, variables: vars })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (j.errors) throw new Error(j.errors[0].message);
+    return j.data;
+  }
+
+  // ── Warehouse name normalisation ────────────────────────────────────────────
+  function irWhName(w) {
+    return (w || '').replace(/^Warehouse\s*-\s*/, '').replace(/^Warehouse\s+/, '').trim() || w || '—';
+  }
+
+  // ── Tier mapping ─────────────────────────────────────────────────────────────
+  function irTier(whRaw) {
+    const n = irWhName(whRaw).toLowerCase();
+    if (n.includes('coventry') || n.includes('slc')) return 'Tier 1';
+    return 'Tier 2';
+  }
+
+  // ── Trailing orders from localStorage ────────────────────────────────────────
+  function irGetTrailing(id) {
+    try {
+      const tc = JSON.parse(localStorage.getItem('trailing_order_counts') || '{}');
+      return typeof tc[id] === 'number' ? tc[id] : null;
+    } catch(e) { return null; }
+  }
+
+  function irHasTrailingCache() {
+    try {
+      return Object.keys(JSON.parse(localStorage.getItem('trailing_order_counts') || '{}')).length > 0;
+    } catch(e) { return false; }
+  }
+
+  // ── Recommendation logic ──────────────────────────────────────────────────────
+  function irRecommend(item) {
+    const t12 = item.trailing12mo;
+    const monthly = t12 !== null ? t12 / 12 : null;
+    const min = item.minQuantity || 0;
+    const max = item.maxQuantity || 0;
+
+    if (monthly !== null) {
+      if (monthly === 0) {
+        return { rec: 'Remove', why: 'Zero orders in trailing 12 months', recMin: null, recMax: null };
+      }
+      if (max > 0 && monthly > max * 0.85) {
+        const recMin = Math.ceil(Math.ceil(monthly * 0.9) / 5) * 5;
+        const recMax = Math.ceil(Math.ceil(monthly * 1.25) / 5) * 5;
+        return { rec: 'Increase', why: 'Monthly demand (' + monthly.toFixed(1) + ') exceeds 85% of max (' + max + ')', recMin, recMax };
+      }
+      if (min > 3 && monthly < min * 0.30) {
+        const recMin = Math.ceil(Math.ceil(monthly * 2) / 5) * 5;
+        const recMax = Math.ceil(Math.ceil(monthly * 3) / 5) * 5;
+        return { rec: 'Reduce', why: 'Monthly demand (' + monthly.toFixed(1) + ') is below 30% of min (' + min + ')', recMin, recMax };
+      }
+    }
+    if (!item.autoOrder) {
+      return { rec: 'Enable Auto Order', why: 'Auto order is currently disabled', recMin: null, recMax: null };
+    }
+    if (monthly === null) {
+      return { rec: 'No change', why: 'Trailing order data unavailable', recMin: null, recMax: null };
+    }
+    return { rec: 'No change', why: 'Levels within acceptable range', recMin: null, recMax: null };
+  }
+
+  // ── Recommendation badge ──────────────────────────────────────────────────────
+  function irRecBadge(rec) {
+    const cls = {
+      'Remove': 'ir-rec-remove',
+      'Increase': 'ir-rec-increase',
+      'Reduce': 'ir-rec-reduce',
+      'Enable Auto Order': 'ir-rec-autoorder',
+      'No change': 'ir-rec-nochange'
+    }[rec] || '';
+    return '<span class="ir-rec ' + cls + '">' + rec + '</span>';
+  }
+
+  // ── Client search ─────────────────────────────────────────────────────────────
+  const irSearchEl = document.getElementById('irSearchInput');
+  if (irSearchEl) {
+    irSearchEl.addEventListener('input', function() {
+      clearTimeout(irSearchTimer);
+      const v = this.value.trim();
+      const dd = document.getElementById('irDropdown');
+      if (v.length < 2) { dd.style.display = 'none'; return; }
+      dd.innerHTML = '<div class="ca-drop-item"><span class="ca-drop-msg">Searching…</span></div>';
+      dd.style.display = 'block';
+      irSearchTimer = setTimeout(() => irDoSearch(v), 300);
+    });
+    irSearchEl.addEventListener('focus', function() {
+      this.style.borderColor = 'var(--accent)';
+    });
+    irSearchEl.addEventListener('blur', function() {
+      this.style.borderColor = 'var(--border2)';
+    });
+  }
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#irSearchInput') && !e.target.closest('#irDropdown'))
+      document.getElementById('irDropdown').style.display = 'none';
+  });
+
+  async function irDoSearch(name) {
+    const dd = document.getElementById('irDropdown');
+    try {
+      const data = await irGql(
+        'query($pn:Int!,$ps:Int!,$sort:[Sort],$f:OrganizationFilter){getAllOrganizations(pagingAndSorting:{pageNumber:$pn,pageSize:$ps,sort:$sort} filter:$f){data{id name status}}}',
+        { pn: 1, ps: 12, sort: [{ field: 'name', direction: 'ASC' }], f: { name } }
+      );
+      const list = data && data.getAllOrganizations ? data.getAllOrganizations.data || [] : [];
+      if (!list.length) {
+        dd.innerHTML = '<div class="ca-drop-item"><span class="ca-drop-msg">No clients found</span></div>'; return;
+      }
+      // Store in map to avoid escaping client names in onclick attributes
+      window._irClientMap = window._irClientMap || {};
+      list.forEach(function(c) { window._irClientMap[c.id] = c; });
+      dd.innerHTML = list.map(function(c) {
+        return '<div class="ca-drop-item" onclick="irPickClientById(\''+c.id+'\')">'
+          + '<span class="ca-drop-name">'+c.name+'</span>'
+          + '<span class="ca-status-'+c.status.toLowerCase()+'">'+c.status+'</span>'
+          + '</div>';
+      }).join('');
+    } catch(e) {
+      dd.innerHTML = '<div class="ca-drop-item"><span class="ca-drop-msg">Error: '+e.message+'</span></div>';
+    }
+  }
+
+  // ── Pick client by ID (safe - avoids escaping issues in onclick) ──────────────
+  window.irPickClientById = function(id) {
+    var c = (window._irClientMap || {})[id];
+    if (c) window.irPickClient(c.id, c.name, c.status);
+  };
+
+  // ── Pick client ───────────────────────────────────────────────────────────────
+  window.irPickClient = async function(orgId, name, status) {
+    irOrgId = orgId; irOrgName = name;
+    document.getElementById('irSearchInput').value = name;
+    document.getElementById('irDropdown').style.display = 'none';
+    document.getElementById('irBadgeName').textContent = name;
+    document.getElementById('irBadgeId').textContent = orgId;
+    document.getElementById('irClientBadge').style.display = 'flex';
+    document.getElementById('irEmpty').style.display = 'none';
+    document.getElementById('irContent').style.display = 'block';
+    document.getElementById('irLoadBtn').style.display = '';
+    irCurrentWh = null;
+    await irLoadData();
+  };
+
+  window.irClear = function() {
+    irOrgId = null; irOrgName = null; irData = []; irCurrentWh = null;
+    document.getElementById('irSearchInput').value = '';
+    document.getElementById('irClientBadge').style.display = 'none';
+    document.getElementById('irEmpty').style.display = 'flex';
+    document.getElementById('irContent').style.display = 'none';
+    document.getElementById('irLoadBtn').style.display = 'none';
+  };
+
+  window.irLoad = function() { irLoadData(); };
+
+  // ── Sub-tab switch ─────────────────────────────────────────────────────────────
+  window.irSwitchSubtab = function(tab) {
+    document.querySelectorAll('.ir-subtab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.ir-subtab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('irPanel-'+tab).classList.add('active');
+    var btns = document.querySelectorAll('.ir-subtab-btn');
+    btns.forEach(function(b) { if (b.getAttribute('onclick') && b.getAttribute('onclick').indexOf(tab) !== -1) b.classList.add('active'); });
+  };
+
+  // ── Load data ──────────────────────────────────────────────────────────────────
+  async function irLoadData() {
+    var orgId = irOrgId;
+    document.getElementById('irSummaryLoading').style.display = 'block';
+    document.getElementById('irSummaryLoading').textContent = 'Loading inventory data from MGMT…';
+    document.getElementById('irSummaryContent').style.display = 'none';
+    document.getElementById('irWhLoading').style.display = 'block';
+    document.getElementById('irWhLoading').textContent = 'Loading…';
+    document.getElementById('irWhContent').style.display = 'none';
+    document.getElementById('irTrailingNote').textContent = 'Trailing 12mo: checking cache…';
+    document.getElementById('irTrailingNote').className = 'ir-trailing-note';
+
+    var INV_QUERY = 'query getAllInventoryLevelsForOrganization($pagingAndSorting: PagingAndSorting!, $inventoryLevelFilter: InventoryLevelFilter) {'
+      + ' getAllInventoryLevelsForOrganization(pagingAndSorting: $pagingAndSorting inventoryLevelFilter: $inventoryLevelFilter) {'
+      + '   size totalElements totalPages pageNumber'
+      + '   data {'
+      + '     id minQuantity maxQuantity autoCreate active orderedInventories'
+      + '     available { condition quantity }'
+      + '     sku { id vendorSku skuInformation { productTitle } vendor { name } }'
+      + '     warehouse { id name }'
+      + '     region { id name regionCode }'
+      + '   }'
+      + ' }'
+      + '}';
+
+    try {
+      var all = [], page = 1, totalPages = 1;
+      while (page <= totalPages) {
+        document.getElementById('irSummaryLoading').textContent = 'Loading page ' + page + (totalPages > 1 ? '/' + totalPages : '') + '… (' + all.length + ' lines so far)';
+        var data = await irGql(INV_QUERY, {
+          pagingAndSorting: { pageNumber: page, pageSize: 200, sort: [{ direction: 'ASC', field: 'sku.skuInformation.productTitle' }] },
+          inventoryLevelFilter: { organizationIds: [orgId], includeInactive: true }
+        });
+        if (irOrgId !== orgId) return;
+        var resp = data && data.getAllInventoryLevelsForOrganization;
+        if (!resp) break;
+        totalPages = resp.totalPages || 1;
+        all = all.concat(resp.data || []);
+        page++;
+      }
+
+      // Trailing orders cache check
+      var hasCache = irHasTrailingCache();
+      var tn = document.getElementById('irTrailingNote');
+      if (hasCache) {
+        tn.textContent = '✓ Trailing 12mo orders: cached data available';
+        tn.className = 'ir-trailing-note has-data';
+      } else {
+        tn.textContent = 'ℹ Trailing 12mo: not cached — Enable Auto Order recommendations only';
+        tn.className = 'ir-trailing-note';
+      }
+
+      // Process records
+      irData = all.map(function(item) {
+        var onHand = (item.available || []).reduce(function(s, a) { return s + (a.quantity || 0); }, 0);
+        var trailing = irGetTrailing(item.id);
+        var r = irRecommend({
+          trailing12mo: trailing,
+          minQuantity: item.minQuantity,
+          maxQuantity: item.maxQuantity,
+          autoOrder: item.autoCreate
+        });
+        return {
+          id: item.id,
+          vendor: (item.sku && item.sku.vendor && item.sku.vendor.name) || '—',
+          product: (item.sku && item.sku.skuInformation && item.sku.skuInformation.productTitle) || (item.sku && item.sku.vendorSku) || '—',
+          vendorSku: (item.sku && item.sku.vendorSku) || '—',
+          warehouseRaw: (item.warehouse && item.warehouse.name) || '—',
+          warehouse: irWhName((item.warehouse && item.warehouse.name) || ''),
+          region: (item.region && item.region.name) || '',
+          minQuantity: item.minQuantity || 0,
+          maxQuantity: item.maxQuantity || 0,
+          autoOrder: item.autoCreate,
+          active: item.active,
+          onHand: onHand,
+          orderedInventories: item.orderedInventories || 0,
+          trailing12mo: trailing,
+          rec: r.rec,
+          why: r.why,
+          recMin: r.recMin,
+          recMax: r.recMax,
+          tier: irTier((item.warehouse && item.warehouse.name) || '')
+        };
+      });
+
+      irRenderSummary();
+      irBuildWhSelector();
+
+    } catch(e) {
+      document.getElementById('irSummaryLoading').textContent = '⚠ Error loading data: ' + e.message;
+      document.getElementById('irWhLoading').textContent = '⚠ Error: ' + e.message;
+    }
+  }
+
+  // ── Render summary ─────────────────────────────────────────────────────────────
+  function irRenderSummary() {
+    document.getElementById('irSummaryLoading').style.display = 'none';
+    document.getElementById('irSummaryContent').style.display = 'block';
+
+    var total = irData.length;
+    var removeCount  = irData.filter(function(d) { return d.rec === 'Remove'; }).length;
+    var increaseCount= irData.filter(function(d) { return d.rec === 'Increase'; }).length;
+    var reduceCount  = irData.filter(function(d) { return d.rec === 'Reduce'; }).length;
+    var aoCount      = irData.filter(function(d) { return d.rec === 'Enable Auto Order'; }).length;
+    var noChange     = irData.filter(function(d) { return d.rec === 'No change'; }).length;
+    var autoOnCount  = irData.filter(function(d) { return d.autoOrder; }).length;
+    var autoOnPct    = total > 0 ? Math.round(autoOnCount / total * 100) : 0;
+    var attention    = removeCount + increaseCount + reduceCount + aoCount;
+    var whCount      = [...new Set(irData.map(function(d) { return d.warehouse; }))].length;
+
+    document.getElementById('irStatsRow').innerHTML =
+      '<div class="ir-stat"><div class="ir-stat-label">Total SKU Lines</div><div class="ir-stat-val">' + total + '</div><div class="ir-stat-sub">across ' + whCount + ' warehouses</div></div>'
+      + '<div class="ir-stat"><div class="ir-stat-label">Auto Order On</div><div class="ir-stat-val" style="color:var(--green)">' + autoOnPct + '%</div><div class="ir-stat-sub">' + autoOnCount + ' of ' + total + ' lines</div></div>'
+      + '<div class="ir-stat"><div class="ir-stat-label">Need Attention</div><div class="ir-stat-val" style="color:var(--amber)">' + attention + '</div><div class="ir-stat-sub">action recommended</div></div>'
+      + '<div class="ir-stat"><div class="ir-stat-label">No Change</div><div class="ir-stat-val" style="color:var(--green)">' + noChange + '</div><div class="ir-stat-sub">levels OK</div></div>'
+      + '<div class="ir-stat"><div class="ir-stat-label">Warehouses</div><div class="ir-stat-val">' + whCount + '</div><div class="ir-stat-sub">active locations</div></div>';
+
+    // Group by warehouse
+    var byWh = {};
+    irData.forEach(function(d) {
+      if (!byWh[d.warehouse]) byWh[d.warehouse] = { items: [], tier: d.tier };
+      byWh[d.warehouse].items.push(d);
+    });
+    var whNames = Object.keys(byWh).sort(function(a, b) {
+      if (byWh[a].tier !== byWh[b].tier) return byWh[a].tier < byWh[b].tier ? -1 : 1;
+      return a.localeCompare(b);
+    });
+
+    document.getElementById('irSummaryBody').innerHTML = whNames.map(function(wh) {
+      var items = byWh[wh].items;
+      var tier  = byWh[wh].tier;
+      var n     = items.length;
+      var aoOn  = items.filter(function(d) { return d.autoOrder; }).length;
+      var aoPct = n > 0 ? Math.round(aoOn / n * 100) : 0;
+      var inc   = items.filter(function(d) { return d.rec === 'Increase'; }).length;
+      var red   = items.filter(function(d) { return d.rec === 'Reduce'; }).length;
+      var rem   = items.filter(function(d) { return d.rec === 'Remove'; }).length;
+      var ao    = items.filter(function(d) { return d.rec === 'Enable Auto Order'; }).length;
+      var nc    = items.filter(function(d) { return d.rec === 'No change'; }).length;
+      var tc    = tier === 'Tier 1' ? 'ir-tier-1' : 'ir-tier-2';
+      function fmt(v, color) {
+        return v > 0 ? '<span style="font-weight:700;color:'+color+'">'+v+'</span>' : '<span style="color:var(--muted)">—</span>';
+      }
+      return '<tr>'
+        + '<td style="font-weight:600;color:var(--text)">' + wh + '</td>'
+        + '<td style="text-align:center"><span class="'+tc+'">'+tier+'</span></td>'
+        + '<td>' + n + '</td>'
+        + '<td>' + aoPct + '% <span style="color:var(--muted);font-size:10px">('+aoOn+'/'+n+')</span></td>'
+        + '<td>' + fmt(inc, 'var(--amber)') + '</td>'
+        + '<td>' + fmt(red, 'var(--purple)') + '</td>'
+        + '<td>' + fmt(rem, 'var(--red)') + '</td>'
+        + '<td>' + fmt(ao,  'var(--accent2)') + '</td>'
+        + '<td>' + (nc > 0 ? '<span style="color:var(--green)">'+nc+'</span>' : '<span style="color:var(--muted)">—</span>') + '</td>'
+        + '</tr>';
+    }).join('');
+
+    irRenderObservations(byWh, whNames);
+  }
+
+  // ── Key observations ────────────────────────────────────────────────────────────
+  function irRenderObservations(byWh, whNames) {
+    var obs = [];
+    var hasTrailing = irData.some(function(d) { return d.trailing12mo !== null; });
+
+    if (!hasTrailing) {
+      obs.push({ icon: 'ℹ️', text: 'Trailing 12-month order data is not cached for this client. Only "Enable Auto Order" recommendations are shown. To get full recommendations, load Wise first so its order history is cached.' });
+    }
+
+    var autoOnCount = irData.filter(function(d) { return d.autoOrder; }).length;
+    var aoPct = irData.length > 0 ? Math.round(autoOnCount / irData.length * 100) : 0;
+    if (aoPct < 80) {
+      obs.push({ icon: '⚠️', text: 'Only ' + aoPct + '% of SKU lines have auto order enabled (' + autoOnCount + ' of ' + irData.length + '). ' + irData.filter(function(d) { return d.rec === 'Enable Auto Order'; }).length + ' SKUs are recommended for activation.' });
+    } else {
+      obs.push({ icon: '✅', text: aoPct + '% of SKU lines have auto order enabled — strong coverage across the portfolio.' });
+    }
+
+    var rem = irData.filter(function(d) { return d.rec === 'Remove'; }).length;
+    if (rem > 0) obs.push({ icon: '🗑️', text: rem + ' SKU line' + (rem > 1 ? 's' : '') + ' had zero orders in the trailing 12 months and may be candidates for removal.' });
+
+    var inc = irData.filter(function(d) { return d.rec === 'Increase'; }).length;
+    if (inc > 0) obs.push({ icon: '📈', text: inc + ' SKU line' + (inc > 1 ? 's' : '') + ' show demand exceeding 85% of their current maximum — consider increasing min/max levels to avoid stockouts.' });
+
+    var red = irData.filter(function(d) { return d.rec === 'Reduce'; }).length;
+    if (red > 0) obs.push({ icon: '📉', text: red + ' SKU line' + (red > 1 ? 's' : '') + ' have monthly demand below 30% of their minimum — reducing levels could free warehouse capacity.' });
+
+    // Worst warehouse
+    var worstWh = null, worstCount = 0;
+    whNames.forEach(function(wh) {
+      var issues = byWh[wh].items.filter(function(d) { return d.rec !== 'No change'; }).length;
+      if (issues > worstCount) { worstCount = issues; worstWh = wh; }
+    });
+    if (worstWh && worstCount > 0) {
+      obs.push({ icon: '🏭', text: worstWh + ' has the most SKUs requiring attention: ' + worstCount + ' of ' + byWh[worstWh].items.length + ' lines need a change.' });
+    }
+
+    // All good
+    if (obs.filter(function(o) { return o.icon !== 'ℹ️'; }).length === 0) {
+      obs.push({ icon: '✅', text: 'All inventory levels are within acceptable ranges. No immediate action required.' });
+    }
+
+    document.getElementById('irObsList').innerHTML = obs.map(function(o) {
+      return '<li><span class="ir-obs-icon">' + o.icon + '</span><span>' + o.text + '</span></li>';
+    }).join('');
+  }
+
+  // ── Build warehouse selector buttons ────────────────────────────────────────────
+  function irBuildWhSelector() {
+    document.getElementById('irWhLoading').style.display = 'none';
+    document.getElementById('irWhContent').style.display = 'block';
+    var warehouses = [...new Set(irData.map(function(d) { return d.warehouse; }))].sort();
+    document.getElementById('irWhSelector').innerHTML = warehouses.map(function(wh) {
+      return '<button class="ir-wh-btn' + (wh === irCurrentWh ? ' active' : '') + '" onclick="irSelectWh(\''+wh+'\')">' + wh + '</button>';
+    }).join('');
+    if (warehouses.length > 0 && !irCurrentWh) irSelectWh(warehouses[0]);
+    else if (irCurrentWh) irRenderWhTable();
+  }
+
+  window.irSelectWh = function(wh) {
+    irCurrentWh = wh;
+    document.querySelectorAll('.ir-wh-btn').forEach(function(b) {
+      b.classList.toggle('active', b.textContent.trim() === wh);
+    });
+    document.getElementById('irWhTableTitle').textContent = wh;
+    if (document.getElementById('irWhFilter')) document.getElementById('irWhFilter').value = '';
+    irRenderWhTable();
+  };
+
+  // ── Render warehouse table ───────────────────────────────────────────────────────
+  window.irRenderWhTable = function() {
+    var filterEl = document.getElementById('irWhFilter');
+    var q = filterEl ? filterEl.value.toLowerCase() : '';
+    var rows = irData.filter(function(d) { return d.warehouse === irCurrentWh; });
+    if (q) {
+      rows = rows.filter(function(d) {
+        return d.product.toLowerCase().includes(q)
+          || d.vendor.toLowerCase().includes(q)
+          || d.vendorSku.toLowerCase().includes(q)
+          || d.rec.toLowerCase().includes(q);
+      });
+    }
+    var recOrder = { 'Remove':0, 'Increase':1, 'Reduce':2, 'Enable Auto Order':3, 'No change':4 };
+    rows.sort(function(a, b) {
+      var diff = (recOrder[a.rec] || 5) - (recOrder[b.rec] || 5);
+      return diff !== 0 ? diff : a.product.localeCompare(b.product);
+    });
+
+    var tbody = document.getElementById('irWhBody');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted)">' + (q ? 'No items match filter' : 'No items in this warehouse') + '</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function(d) {
+      var recMinStr = (d.recMin !== null && d.recMin !== undefined) ? d.recMin : '—';
+      var recMaxStr = (d.recMax !== null && d.recMax !== undefined) ? d.recMax : '—';
+      var recMinColor = (d.recMin !== null && d.recMin !== undefined) ? 'var(--accent2)' : 'var(--muted)';
+      var recMaxColor = (d.recMax !== null && d.recMax !== undefined) ? 'var(--accent2)' : 'var(--muted)';
+      var trailing = d.trailing12mo !== null ? d.trailing12mo : '<span style="color:var(--muted)">—</span>';
+      return '<tr>'
+        + '<td style="max-width:120px;white-space:normal;font-size:11px;color:var(--text2)">' + d.vendor + '</td>'
+        + '<td style="max-width:260px;white-space:normal;font-weight:500">' + d.product + '</td>'
+        + '<td style="text-align:center">' + (d.autoOrder ? '<span style="color:var(--green);font-weight:700">✓</span>' : '<span style="color:var(--red);font-weight:700">✗</span>') + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono)">' + d.minQuantity + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono)">' + d.maxQuantity + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono);color:'+recMinColor+'">' + recMinStr + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono);color:'+recMaxColor+'">' + recMaxStr + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono)">' + d.onHand + '</td>'
+        + '<td style="text-align:center;font-family:var(--mono)">' + trailing + '</td>'
+        + '<td>' + irRecBadge(d.rec) + '</td>'
+        + '<td style="font-size:11px;color:var(--text2);max-width:180px;white-space:normal">' + (d.why || '—') + '</td>'
+        + '</tr>';
+    }).join('');
+  };
+
+})();
+</script>
+
 </body>
 </html>
