@@ -303,22 +303,26 @@
     display: none;
   }
   .ms-dropdown.open { display: block; }
-  /* Customer dropdowns: cap visible list at ~10 rows and make it scrollable */
-  #inv-customerMenu, #cs-customerMenu {
+  /* Long multi-select dropdowns: cap visible list at ~10 rows and make it scrollable */
+  #inv-customerMenu, #cs-customerMenu, #kpiTrendWhMenu {
     max-height: 340px;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
   #inv-customerMenu::-webkit-scrollbar,
-  #cs-customerMenu::-webkit-scrollbar { width: 8px; }
+  #cs-customerMenu::-webkit-scrollbar,
+  #kpiTrendWhMenu::-webkit-scrollbar { width: 8px; }
   #inv-customerMenu::-webkit-scrollbar-thumb,
-  #cs-customerMenu::-webkit-scrollbar-thumb {
+  #cs-customerMenu::-webkit-scrollbar-thumb,
+  #kpiTrendWhMenu::-webkit-scrollbar-thumb {
     background: var(--border2); border-radius: 4px;
   }
   #inv-customerMenu::-webkit-scrollbar-thumb:hover,
-  #cs-customerMenu::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  #cs-customerMenu::-webkit-scrollbar-thumb:hover,
+  #kpiTrendWhMenu::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   #inv-customerMenu::-webkit-scrollbar-track,
-  #cs-customerMenu::-webkit-scrollbar-track { background: transparent; }
+  #cs-customerMenu::-webkit-scrollbar-track,
+  #kpiTrendWhMenu::-webkit-scrollbar-track { background: transparent; }
   .ms-option {
     display: flex; align-items: center; gap: 9px; padding: 8px 14px;
     font-size: 13px; line-height: 18px; font-family: var(--sans); color: var(--text2);
