@@ -1435,9 +1435,10 @@
           <div class="kpi-chart-subtitle" id="kpiTrendSubtitle">Shipments received per week, split by in-SLO vs out-of-SLO</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <select id="kpiTrendWh" onchange="kpiDashRender()" style="align-self:center;">
-            <option value="">All warehouses</option>
-          </select>
+          <div class="ms-wrap" style="align-self:center;min-width:200px;">
+            <button class="ms-trigger" id="kpiTrendWhTrigger" data-all-label="All warehouses" onclick="msToggle('kpiTrendWhMenu', this)" style="min-width:200px">All warehouses</button>
+            <div class="ms-dropdown" id="kpiTrendWhMenu"></div>
+          </div>
           <select id="kpiTrendGranularity" onchange="kpiDashRender()" style="align-self:center;">
             <option value="week" selected>Weekly</option>
             <option value="month">Monthly</option>
@@ -1498,7 +1499,27 @@
   <div class="kpi-table-wrap">
     <div class="kpi-table-header">
       <div class="kpi-table-title">Breakdown by warehouse</div>
-      <div class="kpi-table-count" id="kpiWhCount">—</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select id="kpiWhTableYear" onchange="kpiRenderWarehouseTable(kpiFilterRows())" style="font-size:12px;padding:4px 8px;">
+          <option value="">All years</option>
+        </select>
+        <select id="kpiWhTableMonth" onchange="kpiRenderWarehouseTable(kpiFilterRows())" style="font-size:12px;padding:4px 8px;">
+          <option value="">All months</option>
+          <option value="1">Jan</option>
+          <option value="2">Feb</option>
+          <option value="3">Mar</option>
+          <option value="4">Apr</option>
+          <option value="5">May</option>
+          <option value="6">Jun</option>
+          <option value="7">Jul</option>
+          <option value="8">Aug</option>
+          <option value="9">Sep</option>
+          <option value="10">Oct</option>
+          <option value="11">Nov</option>
+          <option value="12">Dec</option>
+        </select>
+        <div class="kpi-table-count" id="kpiWhCount">—</div>
+      </div>
     </div>
     <div style="overflow-x:auto">
       <table class="kpi-table" id="kpiWhTable">
@@ -2202,13 +2223,31 @@ function kpiDashPopulateWarehouseFilter() {
       warehouses.map(w => `<option value="${escapeHTML(w)}">${escapeHTML(w)}</option>`).join('');
     if (current && warehouses.includes(current)) sel.value = current;
   }
-  // Trend chart warehouse filter
-  const trendSel = document.getElementById('kpiTrendWh');
-  if (trendSel) {
-    const current = trendSel.value;
-    trendSel.innerHTML = '<option value="">All warehouses</option>' +
-      warehouses.map(w => `<option value="${escapeHTML(w)}">${escapeHTML(w)}</option>`).join('');
-    if (current && warehouses.includes(current)) trendSel.value = current;
+  // Trend chart warehouse filter — multi-select checkbox dropdown.
+  // Preserves any prior selections across data refreshes via msPopulateDynamic's
+  // built-in 'prev' set. Empty selection means "all warehouses".
+  const trendMenu = document.getElementById('kpiTrendWhMenu');
+  const trendTrigger = document.getElementById('kpiTrendWhTrigger');
+  if (trendMenu && trendTrigger) {
+    msPopulateDynamic('kpiTrendWhMenu', 'kpiTrendWhTrigger', warehouses, 'All warehouses');
+  }
+
+  // Breakdown-by-warehouse year filter — populate from years present in the
+  // leg's completion-date field. Preserves the currently selected year if it
+  // still exists in the new data; falls back to "All years" otherwise.
+  const yearSel = document.getElementById('kpiWhTableYear');
+  if (yearSel) {
+    const cfg = kpiGetLegConfig();
+    const years = [...new Set(
+      kpiDashRows
+        .map(r => kpiParseDate(r[cfg.endField]))
+        .filter(d => d)
+        .map(d => d.getFullYear())
+    )].sort((a, b) => b - a);
+    const current = yearSel.value;
+    yearSel.innerHTML = '<option value="">All years</option>' +
+      years.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (current && years.includes(parseInt(current, 10))) yearSel.value = current;
   }
 }
 
@@ -2429,16 +2468,27 @@ function kpiRenderTrendChart(rows) {
   const granularity = (document.getElementById('kpiTrendGranularity') || {}).value || 'week';
   const isMonth = granularity === 'month';
 
-  // Trend-chart-specific warehouse filter
-  const trendWh = (document.getElementById('kpiTrendWh') || {}).value || '';
-  if (trendWh) rows = rows.filter(r => (r.warehouse || '') === trendWh);
+  // Trend-chart-specific warehouse filter — multi-select. Empty set = all warehouses.
+  const trendWhMenu = document.getElementById('kpiTrendWhMenu');
+  const selectedWhs = trendWhMenu
+    ? [...trendWhMenu.querySelectorAll('input:checked')].map(c => c.value)
+    : [];
+  if (selectedWhs.length > 0) {
+    const selSet = new Set(selectedWhs);
+    rows = rows.filter(r => selSet.has(r.warehouse || ''));
+  }
 
   const cfg = kpiGetLegConfig();
 
-  // Update card title/subtitle to reflect granularity, warehouse, and leg type
+  // Update card title/subtitle to reflect granularity, warehouse, and leg type.
+  // Subtitle warehouse hint: 1 selected → name; 2-3 → comma list; >3 → "N warehouses".
   const titleEl = document.getElementById('kpiTrendTitle');
   const subEl   = document.getElementById('kpiTrendSubtitle');
-  const whLabel = trendWh ? trendWh.replace('Warehouse - ', '') : null;
+  const cleanNames = selectedWhs.map(w => w.replace('Warehouse - ', ''));
+  let whLabel = null;
+  if (cleanNames.length === 1) whLabel = cleanNames[0];
+  else if (cleanNames.length > 1 && cleanNames.length <= 3) whLabel = cleanNames.join(', ');
+  else if (cleanNames.length > 3) whLabel = `${cleanNames.length} warehouses`;
   if (titleEl) titleEl.textContent = isMonth ? 'Monthly trend' : 'Weekly trend';
   if (subEl) {
     const whPart = whLabel ? ` · ${whLabel}` : '';
@@ -2825,6 +2875,26 @@ function kpiRenderWarehouseTable(rows) {
     if (ths[4]) ths[4].textContent = cfg.hasSlo ? 'Open breaches' : 'Stuck >7d';
   }
 
+  // Year + month filters — scoped to this table only. Filter on the leg's
+  // completion-date field (cfg.endField). Open orders (no end date) are
+  // dropped when either filter is active; that means the Open Breaches column
+  // will read 0 for any historical month/year — by design, since open breaches
+  // are a live concept and don't have a completion date to attribute to a past
+  // period.
+  const yearVal  = (document.getElementById('kpiWhTableYear')  || {}).value || '';
+  const monthVal = (document.getElementById('kpiWhTableMonth') || {}).value || '';
+  if (yearVal || monthVal) {
+    const yearNum  = yearVal  ? parseInt(yearVal, 10)  : null;
+    const monthNum = monthVal ? parseInt(monthVal, 10) : null;
+    rows = rows.filter(r => {
+      const d = kpiParseDate(r[cfg.endField]);
+      if (!d) return false;
+      if (yearNum  !== null && d.getFullYear()    !== yearNum)      return false;
+      if (monthNum !== null && (d.getMonth() + 1) !== monthNum)     return false;
+      return true;
+    });
+  }
+
   const byWh = {};
   rows.forEach(r => {
     const wh = r.warehouse || '(unknown)';
@@ -2850,8 +2920,18 @@ function kpiRenderWarehouseTable(rows) {
     }
   });
 
-  const whList = Object.keys(byWh).sort();
-  if (counter) counter.textContent = `${whList.length} warehouse${whList.length === 1 ? '' : 's'}`;
+  // Auto-hide warehouses with 0 completed AND 0 flagged. A warehouse with open
+  // breaches stays visible even when it has zero completions in the window —
+  // those flagged rows are the live signal we don't want to swallow.
+  const allWhList = Object.keys(byWh).sort();
+  const whList = allWhList.filter(wh => byWh[wh].total > 0 || byWh[wh].flagged > 0);
+  const hiddenCount = allWhList.length - whList.length;
+  if (counter) {
+    const baseLabel = `${whList.length} warehouse${whList.length === 1 ? '' : 's'}`;
+    counter.textContent = hiddenCount > 0
+      ? `${baseLabel} · ${hiddenCount} hidden (no data)`
+      : baseLabel;
+  }
 
   if (whList.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" class="kpi-empty">No data in this window.</td></tr>';
@@ -4380,6 +4460,7 @@ function msOnChange(cb, allLabel) {
   cb.closest('.ms-option').classList.toggle('checked', cb.checked);
   msUpdateLabel(menu, trigger, allLabel);
   if (menu.id.startsWith('inv-')) invRenderTable();
+  else if (menu.id.startsWith('kpi')) kpiDashRender();
   else csRenderTable();
 }
 
