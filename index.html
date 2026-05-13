@@ -833,8 +833,57 @@
 
 <!-- Chart.js for the Inbound KPI dashboard -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+
+<!-- ═══ CLERK SSO ═══
+     Replace BOTH placeholders before deploying:
+       1. data-clerk-publishable-key — from Clerk Dashboard → API Keys (pk_test_... in dev, pk_live_... in prod)
+       2. src URL — from Clerk Dashboard → API Keys → JavaScript snippet (your <frontend-api>.clerk.accounts.dev host)
+     Grab the exact tag at: https://dashboard.clerk.com/last-active?path=api-keys -->
+<script
+  async
+  crossorigin="anonymous"
+  data-clerk-publishable-key="pk_test_REPLACE_ME"
+  src="https://REPLACE-ME.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+  type="text/javascript"
+></script>
+
+<!-- Hide the app shell until Clerk decides the user is signed in.
+     `auth-pending` is the initial body class; the bootstrap script swaps it to `signed-in` or `signed-out`. -->
+<style>
+  body.auth-pending > *:not(#clerk-auth-screen) { display: none !important; }
+  body.signed-out  > *:not(#clerk-auth-screen) { display: none !important; }
+  body.signed-in   > #clerk-auth-screen        { display: none !important; }
+  #clerk-auth-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #f0f2f5;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 20px;
+    font-family: \'Inter\', system-ui, sans-serif;
+  }
+  #clerk-auth-screen .auth-brand {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #1a1d2e;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #clerk-auth-screen .auth-brand-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #3d6fff; box-shadow: 0 0 8px #3d6fff;
+  }
+  #clerk-auth-screen .auth-loading {
+    font-size: 12px; color: #7a8198; font-family: \'JetBrains Mono\', monospace;
+  }
+  #clerk-sign-in-mount { min-width: 360px; }
+  #user-button-slot { display: inline-flex; align-items: center; }
+</style>
 </head>
-<body>
+<body class="auth-pending">
+
+<!-- ═══ Clerk auth screen — shown while loading and when signed out ═══ -->
+<div id="clerk-auth-screen">
+  <div class="auth-brand"><span class="auth-brand-dot"></span>Firstbase Operations</div>
+  <div id="clerk-sign-in-mount"></div>
+  <div class="auth-loading" id="clerk-auth-status">Loading sign-in…</div>
+</div>
 
 <div class="topbar">
   <div class="topbar-left">
@@ -854,6 +903,7 @@
     <span id="lastUpdated" style="font-size:11px;color:var(--muted)">Never synced</span>
     <button class="refresh-btn" id="inv-loadBtnTopbar" onclick="invLoadSelected()" disabled style="opacity:0.45;cursor:not-allowed" title="Select an org first">▶ Load</button>
     <button class="refresh-btn" onclick="manualRefresh()" title="Refresh now">↺ Refresh</button>
+    <div id="user-button-slot" title="Account"></div>
   </div>
 </div>
 
@@ -6822,5 +6872,69 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
 
 })();
 </script>
+
+<!-- ═══ Clerk bootstrap ═══════════════════════════════════════════════════
+     Polls for window.Clerk (the async <script> tag in <head> loads it),
+     gates the page based on auth state, and mounts the SignIn + UserButton
+     components. Restrict allowed email domains in Clerk Dashboard →
+     User & Authentication → Restrictions → Allowlist (e.g. firstbase.com).
+─────────────────────────────────────────────────────────────────────────── -->
+<script>
+(function () {
+  var statusEl = function () { return document.getElementById("clerk-auth-status"); };
+  var setStatus = function (msg) { var s = statusEl(); if (s) s.textContent = msg; };
+
+  function waitForClerk() {
+    return new Promise(function (resolve, reject) {
+      var tries = 0;
+      (function poll() {
+        if (window.Clerk && typeof window.Clerk.load === "function") return resolve();
+        if (++tries > 200) return reject(new Error("Clerk script failed to load after 10s"));
+        setTimeout(poll, 50);
+      })();
+    });
+  }
+
+  function render() {
+    var body = document.body;
+    var mount = document.getElementById("clerk-sign-in-mount");
+    var btnSlot = document.getElementById("user-button-slot");
+
+    if (window.Clerk.user) {
+      body.classList.remove("auth-pending", "signed-out");
+      body.classList.add("signed-in");
+      if (btnSlot && !btnSlot.hasChildNodes()) {
+        window.Clerk.mountUserButton(btnSlot, { afterSignOutUrl: "/" });
+      }
+    } else {
+      body.classList.remove("auth-pending", "signed-in");
+      body.classList.add("signed-out");
+      setStatus("");
+      if (mount) {
+        mount.innerHTML = "";
+        window.Clerk.mountSignIn(mount, {
+          afterSignInUrl: "/",
+          afterSignUpUrl: "/",
+          appearance: { elements: { footer: { display: "none" } } }
+        });
+      }
+    }
+  }
+
+  window.addEventListener("load", function () {
+    waitForClerk()
+      .then(function () { return window.Clerk.load(); })
+      .then(function () {
+        render();
+        window.Clerk.addListener(render);
+      })
+      .catch(function (err) {
+        console.error("[Clerk] init failed:", err);
+        setStatus("Sign-in unavailable — check Clerk publishable key and Frontend API host in <head>.");
+      });
+  });
+})();
+</script>
+
 </body>
 </html>
