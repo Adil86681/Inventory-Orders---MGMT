@@ -6995,4 +6995,58 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
   // Poll for window.Clerk without gating on the load event — on fast CDN
   // responses the load event can fire before this listener attaches, leaving
   // the chain dormant forever. Polling indefinitely is fine; the worst case
-  // is the user sees "Loading sign-in…" until the asy
+  // is the user sees "Loading sign-in…" until the async Clerk script arrives.
+  function waitForClerk() {
+    return new Promise(function (resolve) {
+      (function poll() {
+        if (window.Clerk && typeof window.Clerk.load === "function") return resolve();
+        setTimeout(poll, 50);
+      })();
+    });
+  }
+
+  function applySignedIn() {
+    var body = document.body;
+    body.classList.remove("auth-pending", "signed-out");
+    body.classList.add("signed-in");
+    var btnSlot = document.getElementById("user-button-slot");
+    if (btnSlot && !btnSlot.hasChildNodes()) {
+      try { window.Clerk.mountUserButton(btnSlot, { afterSignOutUrl: "/" }); } catch (e) { console.warn("[Clerk] mountUserButton:", e); }
+    }
+  }
+
+  function init() {
+    waitForClerk()
+      .then(function () { return window.Clerk.load(); })
+      .then(function () {
+        if (window.Clerk.user) {
+          applySignedIn();
+          window.Clerk.addListener(function () {
+            if (window.Clerk.user) {
+              applySignedIn();
+            } else {
+              // signed out → kick back to hosted sign-in
+              window.Clerk.redirectToSignIn();
+            }
+          });
+        } else {
+          // No session → hosted sign-in avoids the mountSignIn
+          // "components not ready" race that can happen on first load.
+          setStatus("Redirecting to sign-in…");
+          window.Clerk.redirectToSignIn();
+        }
+      })
+      .catch(function (err) {
+        console.error("[Clerk] init failed:", err);
+        setStatus("Sign-in unavailable: " + (err && err.message ? err.message : "unknown error"));
+      });
+  }
+
+  // Run immediately. By the time this script executes (it sits at the bottom
+  // of <body>), the DOM is fully parsed, so no need to wait for DOMContentLoaded.
+  init();
+})();
+</script>
+
+</body>
+</html>
