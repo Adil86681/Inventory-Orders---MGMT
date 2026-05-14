@@ -6992,9 +6992,7 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
   var statusEl = function () { return document.getElementById("clerk-auth-status"); };
   var setStatus = function (msg) { var s = statusEl(); if (s) s.textContent = msg; };
 
-  function waitForClerk() {
-    return new Promise(function (resolve, reject) {
-      var tries = 0;
-      (function poll() {
-        if (window.Clerk && typeof window.Clerk.load === "function") return resolve();
-        if (++tries > 200) return reject(new Error("Clerk script failed to
+  // Poll for window.Clerk without gating on the load event — on fast CDN
+  // responses the load event can fire before this listener attaches, leaving
+  // the chain dormant forever. Polling indefinitely is fine; the worst case
+  // is the user sees "Loading sign-in…" until the asy
