@@ -11,7 +11,7 @@
 <style>:root { color-scheme: light; }  /* Email draft modal + selection-checkbox column */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 60px 16px 16px; }
   .modal-backdrop.show { display: flex; }
-  .modal { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-hover); max-width: 880px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; }
+  .modal { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-hover); max-width: 1100px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; }
   .modal-header { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .modal-header h2 { font-size: 17px; font-weight: 600; margin: 0; }
   .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
@@ -23,7 +23,7 @@
   .email-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .04em; }
   .email-subject { font-size: 13px; padding: 8px 10px; background: var(--primary-light); border-radius: 6px; margin-bottom: 8px; }
   .email-subject strong { font-weight: 600; margin-right: 6px; }
-  .email-body { white-space: pre-wrap; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; line-height: 1.55; padding: 12px; background: #f8fafc; border-radius: 6px; border: 1px solid var(--border); max-height: 320px; overflow-y: auto; color: var(--text); }
+  .email-body { white-space: pre; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; line-height: 1.55; padding: 12px; background: #f8fafc; border-radius: 6px; border: 1px solid var(--border); max-height: 320px; overflow: auto; color: var(--text); }
   .email-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
   .btn-copy-email { padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; color: var(--text); }
   .btn-copy-email:hover { background: var(--primary-light); }
@@ -3218,24 +3218,68 @@ _emailObserveTbody('inv-tableBody', invUpdateSelectionUi);
 _emailObserveTbody('cs-tableBody', csUpdateSelectionUi);
 
 // Build the email subject + body text for a group of orders headed to one
-// warehouse. Returns { subject, body }.
+// warehouse. Orders are grouped by FB PO Number for readability — same-PO
+// orders get nested as bullets under one header. Orders without a PO are
+// collected into a "PO pending" group at the bottom. Returns { subject, body }.
 function emailBuildText(warehouseLabel, orders) {
+  // Flatten orders into {poKey, customer, product, qty} item rows so the
+  // grouping logic works uniformly whether an order has 1 or N items.
+  const rows = [];
+  for (const o of orders) {
+    const poRaw = (o.po_number && o.po_number !== '—') ? String(o.po_number).trim() : '';
+    const customer = o.organization || '—';
+    const items = (o.items && o.items.length > 0)
+      ? o.items
+      : [{ product_title: o.product_title || '—', quantity: o.totalQty || '' }];
+    for (const it of items) {
+      rows.push({
+        poKey: poRaw,            // '' for pending
+        customer,
+        product: it.product_title || '—',
+        qty: (it.quantity !== undefined && it.quantity !== '') ? String(it.quantity) : ''
+      });
+    }
+  }
+
+  // Group by poKey, preserving first-seen order so the email follows the
+  // selection order rather than getting alphabetised.
+  const groups = new Map();
+  for (const r of rows) {
+    if (!groups.has(r.poKey)) groups.set(r.poKey, []);
+    groups.get(r.poKey).push(r);
+  }
+
   const lines = [];
   lines.push('Hi team,');
   lines.push('');
   lines.push(`Please be advised of the following incoming shipments to ${warehouseLabel}:`);
   lines.push('');
-  for (const o of orders) {
-    const poStr = (o.po_number && o.po_number !== '—') ? `FB PO ${o.po_number}` : '[PO pending]';
-    const customer = o.organization || '—';
-    const items = (o.items && o.items.length > 0) ? o.items : [{ product_title: o.product_title || '—', quantity: o.totalQty || '' }];
-    for (const it of items) {
-      const prod = it.product_title || '—';
-      const qty = (it.quantity !== undefined && it.quantity !== '') ? `Qty: ${it.quantity}` : '';
-      const tail = qty ? ` (${qty})` : '';
-      lines.push(`• ${poStr} — ${customer} — ${prod}${tail}`);
+
+  // Render real POs first, then the pending bucket (if any).
+  const orderedKeys = [...groups.keys()].filter(k => k !== '');
+  if (groups.has('')) orderedKeys.push('');
+
+  orderedKeys.forEach((poKey, idx) => {
+    const groupRows = groups.get(poKey);
+    // Pick a header customer — show "(multiple customers)" if they differ.
+    const uniqueCustomers = [...new Set(groupRows.map(r => r.customer))];
+    const headerCustomer = uniqueCustomers.length === 1
+      ? uniqueCustomers[0]
+      : 'multiple customers';
+    const headerLabel = poKey
+      ? `FB PO ${poKey} (${headerCustomer})`
+      : `FB PO pending (${headerCustomer})`;
+    lines.push(`━━━ ${headerLabel} ━━━`);
+    for (const r of groupRows) {
+      const qtyPart = r.qty ? ` — Qty: ${r.qty}` : '';
+      // If the group has mixed customers, prepend the customer to each
+      // bullet so the warehouse can still tell them apart.
+      const prefix = uniqueCustomers.length > 1 ? `${r.customer} — ` : '';
+      lines.push(`  • ${prefix}${r.product}${qtyPart}`);
     }
-  }
+    if (idx < orderedKeys.length - 1) lines.push('');
+  });
+
   lines.push('');
   lines.push('Thanks');
   return {
