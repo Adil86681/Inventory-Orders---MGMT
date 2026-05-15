@@ -8,7 +8,31 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<style>:root { color-scheme: light; }</style>
+<style>:root { color-scheme: light; }  /* Email draft modal + selection-checkbox column */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 60px 16px 16px; }
+  .modal-backdrop.show { display: flex; }
+  .modal { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-hover); max-width: 880px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; }
+  .modal-header { padding: 16px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .modal-header h2 { font-size: 17px; font-weight: 600; margin: 0; }
+  .modal-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+  .modal-close { background: none; border: 0; font-size: 22px; cursor: pointer; color: var(--text-muted); padding: 4px 8px; border-radius: 6px; }
+  .modal-close:hover { background: var(--bg); }
+  .email-block { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; background: var(--card); }
+  .email-block:last-child { margin-bottom: 0; }
+  .email-block h3 { font-size: 14px; font-weight: 600; margin: 0 0 8px; color: var(--primary-dark); }
+  .email-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  .email-subject { font-size: 13px; padding: 8px 10px; background: var(--primary-light); border-radius: 6px; margin-bottom: 8px; }
+  .email-subject strong { font-weight: 600; margin-right: 6px; }
+  .email-body { white-space: pre-wrap; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; line-height: 1.55; padding: 12px; background: #f8fafc; border-radius: 6px; border: 1px solid var(--border); max-height: 320px; overflow-y: auto; color: var(--text); }
+  .email-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-copy-email { padding: 6px 12px; font-size: 12px; font-weight: 500; border-radius: 6px; border: 1px solid var(--border); background: white; cursor: pointer; color: var(--text); }
+  .btn-copy-email:hover { background: var(--primary-light); }
+  .btn-copy-email.copied { background: var(--success-bg); color: var(--success); border-color: var(--success); }
+  .row-select-cell { width: 32px; text-align: center; padding-left: 6px; padding-right: 6px; }
+  .row-select-cell input[type="checkbox"] { cursor: pointer; transform: scale(1.05); }
+  .gen-email-wrap { display: inline-flex; align-items: center; gap: 8px; margin-left: 8px; }
+  .gen-email-count { font-size: 12px; color: var(--text-muted); }
+</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Inbound Order Tracker — Live</title>
 <!-- Google Fonts removed for artifact compatibility; system fonts used -->
@@ -1003,12 +1027,19 @@
 
   <div class="table-wrap">
     <div class="table-toolbar">
-      <div class="table-toolbar-left">Line Items <span class="count-badge" id="inv-rowCount">0</span></div>
+      <div class="table-toolbar-left">
+        Line Items <span class="count-badge" id="inv-rowCount">0</span>
+        <span class="gen-email-wrap">
+          <button class="btn btn-primary btn-gen-email" id="inv-genEmailBtn" onclick="emailGenerate('inv')" disabled>📧 Generate Email</button>
+          <span class="gen-email-count" id="inv-selectedCount"></span>
+        </span>
+      </div>
       <div class="table-toolbar-right" id="inv-newCount"></div>
     </div>
     <div class="table-scroll">
       <table>
         <thead><tr>
+          <th class="row-select-cell"><input type="checkbox" id="inv-selectAll" onclick="invSelectAllToggle(this)" title="Select all visible orders"></th>
           <th onclick="invSortBy('friendly_order_id')">Order ID</th>
           <th onclick="invSortBy('organization')">Customer</th>
           <th onclick="invSortBy('product_title')">Product</th>
@@ -1089,12 +1120,19 @@
 
   <div class="table-wrap">
     <div class="table-toolbar">
-      <div class="table-toolbar-left">Line Items <span class="count-badge" id="cs-rowCount">0</span></div>
+      <div class="table-toolbar-left">
+        Line Items <span class="count-badge" id="cs-rowCount">0</span>
+        <span class="gen-email-wrap">
+          <button class="btn btn-primary btn-gen-email" id="cs-genEmailBtn" onclick="emailGenerate('cs')" disabled>📧 Generate Email</button>
+          <span class="gen-email-count" id="cs-selectedCount"></span>
+        </span>
+      </div>
       <div class="table-toolbar-right" id="cs-newCount"></div>
     </div>
     <div class="table-scroll">
       <table id="cs-table">
         <colgroup>
+          <col style="width:38px"><!-- Select -->
           <col style="width:130px"><!-- Customer -->
           <col><!-- Product - takes remaining space -->
           <col style="width:130px"><!-- Copy -->
@@ -1109,6 +1147,7 @@
           <col style="width:130px"><!-- Action -->
         </colgroup>
         <thead><tr>
+          <th class="row-select-cell"><input type="checkbox" id="cs-selectAll" onclick="csSelectAllToggle(this)" title="Select all visible orders"></th>
           <th onclick="csSortBy('organization')">Customer</th>
           <th onclick="csSortBy('product_title')">Product</th>
           <th>Copy</th>
@@ -1132,6 +1171,16 @@
     </div>
   </div>
 </div>
+</div>
+
+<div class="modal-backdrop" id="emailModal" onclick="if(event.target===this)emailCloseModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Email draft — Incoming shipments</h2>
+      <button class="modal-close" onclick="emailCloseModal()" title="Close">×</button>
+    </div>
+    <div class="modal-body" id="emailModalBody"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -3076,6 +3125,193 @@ function invClearAll()   {
   showToast('Local inventory orders cleared');
 }
 
+// ═══ Row selection + Generate Email ════════════════════════════════════
+// Maintain per-tab Sets of selected friendly_order_ids. Selections live
+// in-memory only (not persisted) and orphans (rows for orders that no
+// longer exist after a sync) are filtered out at email-generation time.
+const invSelected = new Set();
+const csSelected = new Set();
+
+function invRowCheckToggle(cb) {
+  const fid = cb.getAttribute('data-fid');
+  if (cb.checked) invSelected.add(fid); else invSelected.delete(fid);
+  invUpdateSelectionUi();
+}
+function csRowCheckToggle(cb) {
+  const fid = cb.getAttribute('data-fid');
+  if (cb.checked) csSelected.add(fid); else csSelected.delete(fid);
+  csUpdateSelectionUi();
+}
+function invSelectAllToggle(cb) {
+  document.querySelectorAll('.inv-row-check').forEach(box => {
+    box.checked = cb.checked;
+    const fid = box.getAttribute('data-fid');
+    if (cb.checked) invSelected.add(fid); else invSelected.delete(fid);
+  });
+  invUpdateSelectionUi();
+}
+function csSelectAllToggle(cb) {
+  document.querySelectorAll('.cs-row-check').forEach(box => {
+    box.checked = cb.checked;
+    const fid = box.getAttribute('data-fid');
+    if (cb.checked) csSelected.add(fid); else csSelected.delete(fid);
+  });
+  csUpdateSelectionUi();
+}
+
+function invUpdateSelectionUi() {
+  // Count only selected orders that are still in invOrders (handles stale
+  // selections after a sync clears an order out of the list).
+  const live = [...invSelected].filter(fid => invOrders[fid]);
+  const n = live.length;
+  const btn = document.getElementById('inv-genEmailBtn');
+  const cnt = document.getElementById('inv-selectedCount');
+  if (btn) btn.disabled = n === 0;
+  if (cnt) cnt.textContent = n > 0 ? `${n} selected` : '';
+  // Sync select-all header to visible-checkbox state.
+  const visible = document.querySelectorAll('.inv-row-check');
+  const all = document.getElementById('inv-selectAll');
+  if (all && visible.length > 0) {
+    const checkedCount = [...visible].filter(b => b.checked).length;
+    all.checked = checkedCount === visible.length;
+    all.indeterminate = checkedCount > 0 && checkedCount < visible.length;
+  } else if (all) {
+    all.checked = false; all.indeterminate = false;
+  }
+}
+function csUpdateSelectionUi() {
+  const live = [...csSelected].filter(fid => csOrders[fid]);
+  const n = live.length;
+  const btn = document.getElementById('cs-genEmailBtn');
+  const cnt = document.getElementById('cs-selectedCount');
+  if (btn) btn.disabled = n === 0;
+  if (cnt) cnt.textContent = n > 0 ? `${n} selected` : '';
+  const visible = document.querySelectorAll('.cs-row-check');
+  const all = document.getElementById('cs-selectAll');
+  if (all && visible.length > 0) {
+    const checkedCount = [...visible].filter(b => b.checked).length;
+    all.checked = checkedCount === visible.length;
+    all.indeterminate = checkedCount > 0 && checkedCount < visible.length;
+  } else if (all) {
+    all.checked = false; all.indeterminate = false;
+  }
+}
+
+// Hook into the existing render path so the UI stays in sync after every
+// render (filter change, sort, sync) without modifying the render funcs.
+const _emailOrigInvRender = window.invRenderTable;
+const _emailOrigCsRender  = window.csRenderTable;
+// Use a MutationObserver instead — the render funcs are declared later in
+// the file and may not exist at this point. Re-evaluate selection UI on
+// every tbody mutation.
+function _emailObserveTbody(tbodyId, updateFn) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) {
+    // tbody may not exist yet on initial parse; retry on DOMContentLoaded.
+    document.addEventListener('DOMContentLoaded', () => _emailObserveTbody(tbodyId, updateFn), { once: true });
+    return;
+  }
+  const obs = new MutationObserver(() => updateFn());
+  obs.observe(tbody, { childList: true });
+}
+_emailObserveTbody('inv-tableBody', invUpdateSelectionUi);
+_emailObserveTbody('cs-tableBody', csUpdateSelectionUi);
+
+// Build the email subject + body text for a group of orders headed to one
+// warehouse. Returns { subject, body }.
+function emailBuildText(warehouseLabel, orders) {
+  const lines = [];
+  lines.push('Hi team,');
+  lines.push('');
+  lines.push(`Please be advised of the following incoming shipments to ${warehouseLabel}:`);
+  lines.push('');
+  for (const o of orders) {
+    const poStr = (o.po_number && o.po_number !== '—') ? `FB PO ${o.po_number}` : '[PO pending]';
+    const customer = o.organization || '—';
+    const items = (o.items && o.items.length > 0) ? o.items : [{ product_title: o.product_title || '—', quantity: o.totalQty || '' }];
+    for (const it of items) {
+      const prod = it.product_title || '—';
+      const qty = (it.quantity !== undefined && it.quantity !== '') ? `Qty: ${it.quantity}` : '';
+      const tail = qty ? ` (${qty})` : '';
+      lines.push(`• ${poStr} — ${customer} — ${prod}${tail}`);
+    }
+  }
+  lines.push('');
+  lines.push('Thanks');
+  return {
+    subject: `Incoming shipments — ${warehouseLabel}`,
+    body: lines.join('\n')
+  };
+}
+
+// Group selected orders by warehouse (using whLabel for the display name
+// so the email reads the same as the column shows) and build one email
+// per warehouse. Render into the modal.
+function emailGenerate(tab) {
+  const sel = tab === 'inv' ? invSelected : csSelected;
+  const store = tab === 'inv' ? invOrders : csOrders;
+  const orders = [...sel].map(fid => store[fid]).filter(Boolean);
+  if (orders.length === 0) return;
+
+  // Group by raw warehouse string so distinct warehouses don't get
+  // merged just because whLabel collapses them.
+  const groups = {};
+  for (const o of orders) {
+    const key = o.warehouse || '(no warehouse)';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(o);
+  }
+
+  const body = document.getElementById('emailModalBody');
+  const sections = [];
+  const warehouseNames = Object.keys(groups).sort();
+  warehouseNames.forEach((wh, idx) => {
+    const label = (typeof whLabel === 'function' ? whLabel(wh) : wh) || wh;
+    const { subject, body: emailBody } = emailBuildText(label, groups[wh]);
+    const safeSubject = subject.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const safeBody = emailBody.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    sections.push(`<div class="email-block">
+      <div class="email-meta">Email ${idx+1} of ${warehouseNames.length} · ${groups[wh].length} order${groups[wh].length===1?'':'s'}</div>
+      <h3>${label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</h3>
+      <div class="email-subject"><strong>Subject:</strong>${safeSubject}</div>
+      <div class="email-body" id="emailBody-${idx}">${safeBody}</div>
+      <div class="email-actions">
+        <button class="btn-copy-email" onclick="emailCopyText(${idx}, 'body', this)">⎘ Copy body</button>
+        <button class="btn-copy-email" onclick="emailCopyText(${idx}, 'subject', this)">⎘ Copy subject</button>
+        <button class="btn-copy-email" onclick="emailCopyText(${idx}, 'both', this)">⎘ Copy subject + body</button>
+      </div>
+    </div>`);
+  });
+
+  // Stash the raw (unescaped) texts so copy buttons get the real strings,
+  // not the HTML-escaped versions in the DOM.
+  window._emailDrafts = warehouseNames.map(wh => {
+    const label = (typeof whLabel === 'function' ? whLabel(wh) : wh) || wh;
+    return emailBuildText(label, groups[wh]);
+  });
+
+  body.innerHTML = sections.join('');
+  document.getElementById('emailModal').classList.add('show');
+}
+
+function emailCloseModal() {
+  document.getElementById('emailModal').classList.remove('show');
+}
+function emailCopyText(idx, kind, btn) {
+  const d = (window._emailDrafts || [])[idx];
+  if (!d) return;
+  let text = '';
+  if (kind === 'subject') text = d.subject;
+  else if (kind === 'body') text = d.body;
+  else text = d.subject + '\n\n' + d.body;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
 // Extract the 9-digit FB PO Number from an InventoryOrder's free-text
 // notes/reason fields. Used as a fallback when the structured PO source
 // (AssetCost.fbPurchaseOrderNumber, fetched via invFetchAssetCostPOs)
@@ -3655,7 +3891,12 @@ function invRenderTable() {
       const productCell = `<span class="sku-tooltip-wrap">${it.product_title || '—'}<span class="sku-tip">SKU: ${it.sku_id || '—'}</span></span>`;
       const copyCell = `<div class="copy-col"><button class="btn-copy" onclick="invCopyItemSku('${eskuItem}',this)">⎘ SKU</button><button class="btn-copy" onclick="invCopyItemSkuProduct('${eskuItem}','${eprod}',this)">⎘ SKU+Product</button></div>`;
 
+      const checkboxCell = idx === 0
+        ? `<td class="row-select-cell"><input type="checkbox" class="inv-row-check" data-fid="${fid.replace(/"/g,'&quot;')}" onclick="invRowCheckToggle(this)" ${invSelected.has(fid) ? 'checked' : ''}></td>`
+        : `<td class="row-select-cell"></td>`;
+
       html += `<tr class="${isRec ? 'received' : ''}${multiClass}${groupFirst}">
+        ${checkboxCell}
         <td class="id-cell">${fid}</td>
         <td>${o.organization || '—'}</td>
         <td class="product-cell">${productCell}</td>
@@ -3976,7 +4217,12 @@ function csRenderTable() {
       const productCell = `<span class="sku-tooltip-wrap">${it.product_title||'—'}<span class="sku-tip">SKU: ${it.sku_id||'—'}</span></span>`;
       const copyCell = `<div class="copy-col"><button class="btn-copy" onclick="invCopyItemSku('${eskuItem}',this)">⎘ SKU</button><button class="btn-copy" onclick="invCopyItemSkuProduct('${eskuItem}','${eprod}',this)">⎘ SKU+Product</button></div>`;
 
+      const checkboxCell = idx === 0
+        ? `<td class="row-select-cell"><input type="checkbox" class="cs-row-check" data-fid="${fid.replace(/"/g,'&quot;')}" onclick="csRowCheckToggle(this)" ${csSelected.has(fid) ? 'checked' : ''}></td>`
+        : `<td class="row-select-cell"></td>`;
+
       html += `<tr class="${isRec ? 'received' : ''}${multiClass}${groupFirst}">
+        ${checkboxCell}
         <td>${o.organization||'—'}</td>
         <td class="product-cell">${productCell}</td>
         <td class="copy-col-cell">${copyCell}</td>
