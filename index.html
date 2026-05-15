@@ -3077,13 +3077,140 @@ function invClearAll()   {
 }
 
 // Extract the 9-digit FB PO Number from an InventoryOrder's free-text
-// notes/reason fields. Uses the same regex as the PO Matcher (pmExtractPOs)
-// so the PO format stays consistent across the app. customerPoNumber is
-// intentionally ignored — the FB PO lives in notes/reason only.
+// notes/reason fields. Used as a fallback when the structured PO source
+// (AssetCost.fbPurchaseOrderNumber, fetched via invFetchAssetCostPOs)
+// returns nothing — e.g. legacy orders that never got an AssetCost record.
+// Uses the same regex as the PO Matcher (pmExtractPOs) so the PO format
+// stays consistent across the app. customerPoNumber is intentionally
+// ignored — it's the *customer's* PO, not the FB PO.
 function invPoFallback(order) {
   const text = ((order && order.notes) || '') + ' ' + ((order && order.reason) || '');
   const m = text.match(/\b(\d{9})\b/);
   return m ? m[1] : '';
+}
+
+// ── FB PO Number enrichment ───────────────────────────────────────────────
+// The structured FB PO Number lives on the AssetCost type, not on
+// InventoryOrder. It's reached via getAssetCostByInventoryOrderId, which
+// means an N+1 fetch (one extra call per order). We cache results in
+// localStorage keyed by inventoryOrderId, with the order's updatedAt as
+// the cache version — so subsequent syncs only refetch orders that
+// actually changed.
+const INV_PO_CACHE_KEY = 'inbound_tracker_inv_po_cache_v1';
+const INV_PO_FETCH_CONCURRENCY = 8;
+
+function invPoCacheLoad() {
+  try {
+    const s = localStorage.getItem(INV_PO_CACHE_KEY);
+    return s ? (JSON.parse(s) || {}) : {};
+  } catch(e) { return {}; }
+}
+function invPoCacheSave(cache) {
+  try { localStorage.setItem(INV_PO_CACHE_KEY, JSON.stringify(cache)); } catch(e){}
+}
+
+// Fetch fbPurchaseOrderNumber values for a single inventory order via the
+// AssetCost endpoint. Returns a deduped string[] of PO numbers (empty if
+// none). Pagination: pageSize 100 mirrors what MGMT uses.
+async function invFetchAssetCostPOsForOrder(inventoryOrderId) {
+  const query = `query GetAssetCostsByOrder($inventoryOrderId: ID!, $pageNumber: Int!, $pageSize: Int!) {
+  getAssetCostByInventoryOrderId(
+    inventoryOrderId: $inventoryOrderId
+    pagingAndSorting: {pageNumber: $pageNumber, pageSize: $pageSize}
+  ) {
+    data { fbPurchaseOrderNumber }
+    totalPages
+  }
+}`;
+  const pos = new Set();
+  let pageNumber = 1;
+  const pageSize = 100;
+  // Hard cap pages defensively — an order with >1000 asset costs is
+  // pathological and we'd rather stop than spin forever.
+  for (let i = 0; i < 10; i++) {
+    const res = await fetch(API_GRAPHQL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query,
+        variables: { inventoryOrderId, pageNumber, pageSize }
+      })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
+    const payload = json.data?.getAssetCostByInventoryOrderId;
+    const rows = payload?.data || [];
+    for (const r of rows) {
+      const po = (r && r.fbPurchaseOrderNumber) ? String(r.fbPurchaseOrderNumber).trim() : '';
+      if (po) pos.add(po);
+    }
+    const totalPages = payload?.totalPages || 1;
+    if (pageNumber >= totalPages) break;
+    pageNumber++;
+  }
+  return [...pos];
+}
+
+// Fetch (or read from cache) FB POs for every order in `orders`.
+// `orders` is the raw API list (each element has .id and .updatedAt).
+// Returns a Map<inventoryOrderId, string[]>.
+async function invFetchAssetCostPOs(orders) {
+  const cache = invPoCacheLoad();
+  const result = new Map();
+  const toFetch = [];
+
+  for (const o of orders) {
+    if (!o || !o.id) continue;
+    const cached = cache[o.id];
+    // Cache hit only if both id matches AND the order hasn't been updated
+    // since we last fetched. We compare updatedAt as a string — both come
+    // from the same API as ISO timestamps, so direct equality is safe.
+    if (cached && cached.updatedAt === (o.updatedAt || '')) {
+      result.set(o.id, cached.pos || []);
+    } else {
+      toFetch.push(o);
+    }
+  }
+
+  if (toFetch.length === 0) return result;
+
+  let done = 0;
+  const total = toFetch.length;
+  setSyncStatus('syncing', `Fetching FB POs 0/${total}…`);
+
+  // Concurrency-limited worker pool. Each worker pulls the next index
+  // from a shared cursor until the list is exhausted.
+  let cursor = 0;
+  async function worker() {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= toFetch.length) return;
+      const order = toFetch[idx];
+      try {
+        const pos = await invFetchAssetCostPOsForOrder(order.id);
+        result.set(order.id, pos);
+        cache[order.id] = { updatedAt: order.updatedAt || '', pos };
+      } catch (e) {
+        // Don't fail the whole sync on one bad order — leave the cache
+        // entry alone so we'll retry next sync, and fall through to the
+        // notes/reason fallback for display.
+        console.warn('FB PO fetch failed for', order.id, e);
+        result.set(order.id, []);
+      }
+      done++;
+      if (done % 5 === 0 || done === total) {
+        setSyncStatus('syncing', `Fetching FB POs ${done}/${total}…`);
+      }
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(INV_PO_FETCH_CONCURRENCY, toFetch.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  invPoCacheSave(cache);
+  return result;
 }
 
 async function invFetchFromAPI() {
@@ -3271,6 +3398,23 @@ async function invFetchFromAPI() {
         invOrders[fid].sku_id = '';
       }
     });
+
+    // ── FB PO Number enrichment ──────────────────────────────────────────
+    // Pull structured FB POs from the AssetCost service for each order
+    // (cached by updatedAt — first sync is slow, later syncs are fast).
+    // If asset-costs returns anything, that wins. Otherwise we keep the
+    // notes/reason regex value already set in po_number above.
+    try {
+      const poMap = await invFetchAssetCostPOs(allOrders);
+      Object.values(invOrders).forEach(o => {
+        const pos = poMap.get(o.inventory_order_id);
+        if (pos && pos.length > 0) {
+          o.po_number = pos.join(', ');
+        }
+      });
+    } catch (e) {
+      console.error('FB PO enrichment error:', e);
+    }
 
     // KPI tracker — diff allOrders against snapshot and emit transition events
     // BEFORE the org-picker filter runs (we want lifecycle data for every order,
