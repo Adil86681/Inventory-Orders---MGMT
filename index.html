@@ -4628,62 +4628,131 @@ function grvOnInput() {
 function grvClear() {
   document.getElementById('grv-input').value = '';
   document.getElementById('grv-results').innerHTML = '';
-  document.getElementById('grv-hint').textContent = 'Type any part of a description — abbreviations like MBA13, M4, 24G, EU work too';
+  document.getElementById('grv-hint').textContent = 'Type any part of a description — abbreviations like MBA13, M4P, 14cC, 48G, UK work too';
   document.getElementById('grv-input').focus();
 }
 
-// Expand common shorthand tokens into full words for matching
-function grvExpandToken(t) {
-  const map = {
-    'mba':'macbook air','mbp':'macbook pro','mba13':'macbook air 13','mba15':'macbook air 15',
-    'mbp14':'macbook pro 14','mbp16':'macbook pro 16',
-    '8cc':'8-core cpu','10cc':'10-core cpu','12cc':'12-core cpu','8cg':'8-core gpu',
-    '10cg':'10-core gpu','12cg':'12-core gpu','16cg':'16-core gpu',
-    '8c8c':'8-core cpu 8-core gpu','10c10c':'10-core cpu 10-core gpu',
-    'uskb':'us english kb','ukkb':'uk english kb','intkb':'international english kb',
-    'intl':'international','int':'international',
-    'eu':'eu plug','uk':'uk plug','us':'us','au':'au plug',
-    '8g':'8gb ram','16g':'16gb ram','24g':'24gb ram','32g':'32gb ram','36g':'36gb ram','48g':'48gb ram','64g':'64gb ram',
-    '256g':'256gb ssd','512g':'512gb ssd','1t':'1tb ssd','2t':'2tb ssd',
-    'm1':'m1','m2':'m2','m3':'m3','m4':'m4',
-    'm1pro':'m1 pro','m2pro':'m2 pro','m3pro':'m3 pro','m4pro':'m4 pro',
-    'm1max':'m1 max','m2max':'m2 max','m3max':'m3 max','m4max':'m4 max',
-    'mid':'midnight','slv':'silver','slvr':'silver','sky':'sky blue','stg':'starlight',
-    'spgry':'space gray','spgrey':'space grey',
-    'wn11':'windows 11','wn11pro':'windows 11 pro','wn10':'windows 10',
-    'fp':'fingerprint','fpr':'fingerprint reader',
-  };
-  return map[t.toLowerCase()] || t;
-}
+// Groups of mutually-exclusive attributes. If the query specifies one value,
+// other values in the same group that appear in a description are penalized.
+const GRV_EXCLUSIVE_GROUPS = [
+  // Colors — if you ask for "midnight" a "space black" result gets penalized
+  ['midnight','space black','space gray','space grey','silver','starlight','sky blue','natural titanium','black titanium','white titanium'],
+  // Plugs — only one plug type per item
+  ['uk plug','eu plug','us plug','au plug','us/ca plug','au/nz plug','jp plug','sg plug','in plug','il plug','br plug','ar plug','kr plug','ae plug','uae plug','ph plug','my/sg plug','mx plug','ca plug','nz plug','nl plug'],
+  // Keyboard language — only one kb per item
+  ['uk english kb','us english kb','international english kb','british kb','german kb','french kb','spanish kb','italian kb','portuguese kb','japanese kb','korean kb','chinese kb','arabic kb','dutch kb','swedish kb','norwegian kb','danish kb','finnish kb','hungarian kb','czech kb','slovak kb','polish kb','romanian kb','turkish kb','thai kb'],
+];
 
+// Shorthand → full phrase expansion map
+const GRV_EXPAND = {
+  'mba':'macbook air','mbp':'macbook pro',
+  'mba13':'macbook air 13','mba15':'macbook air 15',
+  'mbp14':'macbook pro 14','mbp16':'macbook pro 16',
+  '8cc':'8-core cpu','10cc':'10-core cpu','12cc':'12-core cpu','14cc':'14-core cpu','16cc':'16-core cpu',
+  '8cg':'8-core gpu','10cg':'10-core gpu','12cg':'12-core gpu','16cg':'16-core gpu','20cg':'20-core gpu','24cg':'24-core gpu','32cg':'32-core gpu','40cg':'40-core gpu',
+  '8c8c':'8-core cpu 8-core gpu','10c10c':'10-core cpu 10-core gpu',
+  'uskb':'us english kb','ukkb':'uk english kb','intkb':'international english kb',
+  'intl':'international english kb','int':'international english kb',
+  'euplug':'eu plug','ukplug':'uk plug','usplug':'us/ca plug','auplug':'au plug',
+  'eu':'eu plug','au':'au plug',
+  '8g':'8gb ram','16g':'16gb ram','24g':'24gb ram','32g':'32gb ram','36g':'36gb ram','48g':'48gb ram','64g':'64gb ram',
+  '256g':'256gb ssd','512g':'512gb ssd','1t':'1tb ssd','2t':'2tb ssd',
+  'm1pro':'m1 pro','m2pro':'m2 pro','m3pro':'m3 pro','m4pro':'m4 pro',
+  'm1max':'m1 max','m2max':'m2 max','m3max':'m3 max','m4max':'m4 max',
+  'm4p':'m4 pro','m3p':'m3 pro','m2p':'m2 pro','m1p':'m1 pro',
+  'mid':'midnight','slv':'silver','slvr':'silver','sky':'sky blue','stg':'starlight',
+  'spblk':'space black','spgry':'space gray','spgrey':'space grey',
+  'wn11':'windows 11','wn11pro':'windows 11 pro','wn10':'windows 10',
+  'fp':'fingerprint reader','fpr':'fingerprint reader',
+};
+
+// Parse raw input into an array of phrase-strings to match against descriptions.
+// Handles shorthands, compound phrases from adjacent tokens, and slash-separated alternatives.
 function grvTokenize(raw) {
-  // Split on whitespace and common separators, drop very short tokens
-  return raw.toLowerCase()
-    .replace(/[-–—]/g, ' ')
-    .split(/[\s,/]+/)
-    .map(t => t.replace(/[^a-z0-9]/g, ''))
-    .filter(t => t.length >= 2)
-    .map(grvExpandToken);
+  // Normalize: lower, collapse separators to space, strip junk chars
+  const norm = raw.toLowerCase()
+    .replace(/[-–—]+/g, ' ')
+    .replace(/[/]+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+
+  const words = norm.split(/\s+/).filter(Boolean);
+  const phrases = [];
+
+  // Try expanding each word + pairs/triples of adjacent words as compound shorthands
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const w2 = i + 1 < words.length ? w + words[i+1] : null;
+    const w3 = i + 2 < words.length ? w + words[i+1] + words[i+2] : null;
+
+    // Longest compound match first
+    if (w3 && GRV_EXPAND[w3]) { phrases.push(GRV_EXPAND[w3]); i += 2; continue; }
+    if (w2 && GRV_EXPAND[w2]) { phrases.push(GRV_EXPAND[w2]); i += 1; continue; }
+    if (GRV_EXPAND[w])        { phrases.push(GRV_EXPAND[w]);            continue; }
+
+    // Pass through raw word if it's meaningful (≥2 chars)
+    if (w.length >= 2) phrases.push(w);
+  }
+
+  // Also add adjacent pair combos as literal phrases (e.g. "space black", "uk plug")
+  for (let i = 0; i + 1 < words.length; i++) {
+    const pair = words[i] + ' ' + words[i+1];
+    phrases.push(pair);
+  }
+
+  return [...new Set(phrases)];
 }
 
-function grvScore(desc, tokens) {
+// Score a description against the query phrases.
+// Returns { score, matchCount, mismatches }
+function grvScore(desc, phrases) {
   const d = desc.toLowerCase();
   let score = 0;
   let matchCount = 0;
-  for (const tok of tokens) {
-    if (d.includes(tok)) { score += tok.length; matchCount++; }
+  const matchedPhrases = new Set();
+
+  for (const ph of phrases) {
+    if (d.includes(ph)) {
+      score += ph.length * 2;   // longer phrase = stronger signal
+      matchCount++;
+      matchedPhrases.add(ph);
+    }
   }
-  // Bonus: fraction of tokens matched
-  score += (matchCount / tokens.length) * 10;
-  return { score, matchCount };
+
+  // Penalty: for each exclusive group, if the query specified a value that
+  // matched in this desc, check whether any other value from the same group
+  // also appears in the desc (shouldn't happen) — or conversely, if a rival
+  // value appears in the desc but the query didn't ask for it, penalize.
+  let mismatches = 0;
+  for (const group of GRV_EXCLUSIVE_GROUPS) {
+    // Find which group members the QUERY contains
+    const queryHas = group.filter(g => phrases.some(ph => ph === g || ph.includes(g) || g.includes(ph)));
+    if (queryHas.length === 0) continue; // query didn't specify this dimension
+
+    // Find which group members the DESC contains
+    const descHas = group.filter(g => d.includes(g));
+    if (descHas.length === 0) continue;
+
+    // If desc has a value that is NOT in the query's requested values → penalize
+    const mismatch = descHas.some(dv => !queryHas.includes(dv));
+    if (mismatch) {
+      score -= 30;
+      mismatches++;
+    }
+  }
+
+  // Bonus: completeness
+  score += (matchCount / Math.max(phrases.length, 1)) * 15;
+
+  return { score, matchCount, mismatches };
 }
 
-function grvHighlight(text, tokens) {
+function grvHighlight(text, phrases) {
   let result = escHtml(text);
-  // Highlight all original token words
-  const allTerms = [...new Set(tokens)];
-  allTerms.sort((a,b) => b.length - a.length); // longest first to avoid partial re-replacement
-  allTerms.forEach(tok => {
+  // Sort longest first to avoid nested replacements
+  const terms = [...new Set(phrases)].sort((a,b) => b.length - a.length);
+  terms.forEach(tok => {
+    if (tok.length < 2) return;
     const re = new RegExp(`(${tok.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
     result = result.replace(re, '<span class="grv-highlight">$1</span>');
   });
@@ -4705,7 +4774,7 @@ function grvRender() {
 
   if (!raw) {
     resultsEl.innerHTML = '';
-    hintEl.textContent = 'Type any part of a description — abbreviations like MBA13, M4, 24G, EU work too';
+    hintEl.textContent = 'Type any part of a description — abbreviations like MBA13, M4P, 14cC, 48G, UK work too';
     return;
   }
 
@@ -4715,47 +4784,48 @@ function grvRender() {
     return;
   }
 
-  const tokens = grvTokenize(raw);
-  if (!tokens.length) {
+  const phrases = grvTokenize(raw);
+  if (!phrases.length) {
     resultsEl.innerHTML = '<div class="grv-no-results">Enter more characters to search</div>';
     return;
   }
 
   // Score all catalog items
   const scored = psCatalog.map(r => {
-    const { score, matchCount } = grvScore(r.desc + ' ' + r.sku_id + ' ' + r.mpn, tokens);
-    return { ...r, score, matchCount };
-  }).filter(r => r.matchCount > 0);
+    const { score, matchCount, mismatches } = grvScore(r.desc + ' ' + r.mpn, phrases);
+    return { ...r, score, matchCount, mismatches };
+  }).filter(r => r.score > 0 && r.matchCount > 0);
 
-  scored.sort((a, b) => b.score - a.score || b.matchCount - a.matchCount);
+  scored.sort((a, b) => b.score - a.score || a.mismatches - b.mismatches || b.matchCount - a.matchCount);
 
-  const top = scored.slice(0, 10);
-  const exact = top.length > 0 && top[0].matchCount === tokens.length ? top[0] : null;
+  const top = scored.slice(0, 8);
+
+  // "Best match" = top result with no attribute mismatches
+  const best = top.length > 0 && top[0].mismatches === 0 ? top[0] : null;
 
   hintEl.textContent = scored.length === 0
-    ? `No matches found for "${raw}"`
-    : `${scored.length} match${scored.length !== 1 ? 'es' : ''} — showing top ${Math.min(top.length, scored.length)}`;
+    ? `No matches found — try simplifying the query`
+    : `${scored.length} candidate${scored.length !== 1 ? 's' : ''} — showing top ${top.length}`;
 
   if (top.length === 0) {
     resultsEl.innerHTML = '<div class="grv-no-results">No results — try fewer or different terms</div>';
     return;
   }
 
-  // Highlight tokens: use the expanded tokens + original raw words
-  const rawTokens = raw.toLowerCase().split(/[\s,/\-–—]+/).filter(t => t.length >= 2);
-  const hlTokens = [...new Set([...tokens, ...rawTokens])];
-
   resultsEl.innerHTML = top.map((r, i) => {
-    const isExact = exact && i === 0;
-    const matchFrac = Math.round((r.matchCount / tokens.length) * 100);
-    return `<div class="grv-match-card${isExact ? ' exact' : ''}">
-      <div class="grv-match-label ${isExact ? 'exact' : 'fuzzy'}">${isExact ? '⚡ Best Match' : `Match ${i + 1}`}</div>
+    const isBest = best && i === 0;
+    const pct = Math.max(0, Math.round((r.score / (phrases.reduce((s,p)=>s+p.length*2,0)+15)) * 100));
+    const mismatchNote = r.mismatches > 0
+      ? `<span class="grv-match-score" style="color:var(--red);border-color:rgba(179,65,65,0.3);background:rgba(179,65,65,0.07)">⚠ ${r.mismatches} attribute mismatch</span>`
+      : '';
+    return `<div class="grv-match-card${isBest ? ' exact' : ''}">
+      <div class="grv-match-label ${isBest ? 'exact' : 'fuzzy'}">${isBest ? '⚡ Best Match' : `Match ${i + 1}`}</div>
       <div class="grv-match-code">${escHtml(r.sku_id)}</div>
-      <div class="grv-match-desc">${grvHighlight(r.desc, hlTokens)}</div>
+      <div class="grv-match-desc">${grvHighlight(r.desc, phrases)}</div>
       <div class="grv-match-meta">
         <span class="ps-exact-cat">${escHtml(r.cat || '—')}</span>
         ${r.mpn ? `<span class="grv-match-score">MPN: ${escHtml(r.mpn)}</span>` : ''}
-        <span class="grv-match-score">${r.matchCount}/${tokens.length} terms · ${matchFrac}%</span>
+        ${mismatchNote}
       </div>
       <div class="grv-match-actions">
         <button class="grv-copy-btn" onclick="grvCopyText(${JSON.stringify(r.sku_id)}, this)">⎘ Copy Item Code</button>
