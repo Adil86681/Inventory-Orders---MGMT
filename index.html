@@ -7852,8 +7852,6 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
 <script>
 (function () {
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
   function fmtDate(d) {
     return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   }
@@ -7869,39 +7867,33 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
     return BLOCKED.has(n) || BLOCKED.has(n.replace(/^warehouse\s*-?\s*/, ''));
   }
 
-  // ── Core: build the summary from invOrders (already in memory) ───────────
-
   function buildSummary() {
-    const now     = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const sinceISO = weekAgo.toISOString().split('T')[0]; // YYYY-MM-DD for date comparisons
+    const now      = new Date();
+    const weekAgo  = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const sinceISO = weekAgo.toISOString().substring(0, 10); // YYYY-MM-DD
 
     const byWarehouse = {};
     let total = 0;
 
     function countOrder(warehouse, dateStr) {
-      if (!dateStr) return; // no date, skip
-      // dateStr can be YYYY-MM-DD or full ISO — normalise to YYYY-MM-DD
-      const day = dateStr.substring(0, 10);
-      if (day < sinceISO) return; // older than 7 days
+      if (!dateStr) return;
+      const day = String(dateStr).substring(0, 10);
+      if (day < sinceISO) return;
       if (isBlocked(warehouse)) return;
       const label = displayWh(warehouse);
       byWarehouse[label] = (byWarehouse[label] || 0) + 1;
       total++;
     }
 
-    // ── Source 1: invOrders (open/in-transit, manually marked received) ──────
-    // These are loaded from the live API. appStatus RECEIVED means the user
-    // clicked "Receive" in the app; receivedAt is the timestamp for that action.
+    // Source 1: invOrders (live API inventory orders marked received in-app)
     const inv = Object.values(typeof invOrders !== 'undefined' ? invOrders : {});
     for (const o of inv) {
       if (o.appStatus !== 'RECEIVED' && o.appStatus !== 'COMPLETED') continue;
-      // receivedAt is the most accurate timestamp; fall back to updated_date or created_date
       const ts = (o.receivedAt || o.created_date || '').substring(0, 10);
       countOrder(o.warehouse, ts);
     }
 
-    // ── Source 2: csOrders (Customer Supplied Orders) ─────────────────────────
+    // Source 2: csOrders (Customer Supplied Orders marked received)
     const cs = Object.values(typeof csOrders !== 'undefined' ? csOrders : {});
     for (const o of cs) {
       if (o.appStatus !== 'RECEIVED' && o.appStatus !== 'COMPLETED') continue;
@@ -7909,13 +7901,9 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       countOrder(o.warehouse, ts);
     }
 
-    // ── Source 3: kpiDashRows (Google Sheet / CSV — historical received data) ─
-    // This is the richest source: it contains all RECEIVED/COMPLETED orders
-    // imported from the ops sheet, including ones not currently in the live API.
-    // Fields: warehouse, received_date (or similar) — check actual field names.
+    // Source 3: kpiDashRows (sheet/CSV historical received orders)
     const kpi = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
     for (const r of kpi) {
-      // kpiDashRows rows are already completed orders; use whichever date field exists
       const ts = (r.received_date || r.receivedDate || r.completed_date || r.completedDate || r.date || '').substring(0, 10);
       const wh = r.warehouse || r.Warehouse || '';
       countOrder(wh, ts);
@@ -7925,84 +7913,60 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
     return { rows, total, weekStart: fmtDate(weekAgo), weekEnd: fmtDate(now) };
   }
 
-  // ── Build plain-text email body ───────────────────────────────────────────
-
   function buildEmailBody({ rows, total, weekStart, weekEnd }) {
     const divider = '─'.repeat(36);
     const whLines = rows.length > 0
       ? rows.map(([wh, count]) =>
-          `  ${wh.padEnd(24)} ${String(count).padStart(4)} shipment${count !== 1 ? 's' : ''}`
+          '  ' + wh.padEnd(24) + ' ' + String(count).padStart(4) + ' shipment' + (count !== 1 ? 's' : '')
         ).join('\n')
       : '  No shipments received this week.';
 
-    return `Hi Team,
-
-Here's your weekly inbound shipment summary for the week of ${weekStart} – ${weekEnd}.
-
-${divider}
-SHIPMENTS RECEIVED BY WAREHOUSE
-${divider}
-${whLines}
-${divider}
-  ${'TOTAL'.padEnd(24)} ${String(total).padStart(4)} shipment${total !== 1 ? 's' : ''}
-${divider}
-
-This report covers shipments marked as Received between ${weekStart} and ${weekEnd}.
-
-— Firstbase Ops Bot`;
+    return 'Hi Team,\n\n' +
+      'Here\'s your weekly inbound shipment summary for the week of ' + weekStart + ' \u2013 ' + weekEnd + '.\n\n' +
+      divider + '\n' +
+      'SHIPMENTS RECEIVED BY WAREHOUSE\n' +
+      divider + '\n' +
+      whLines + '\n' +
+      divider + '\n' +
+      '  ' + 'TOTAL'.padEnd(24) + ' ' + String(total).padStart(4) + ' shipment' + (total !== 1 ? 's' : '') + '\n' +
+      divider + '\n\n' +
+      'This report covers shipments marked as Received between ' + weekStart + ' and ' + weekEnd + '.\n\n' +
+      '\u2014 Firstbase Ops Bot';
   }
 
-  // ── Render modal content ──────────────────────────────────────────────────
-
   window.weeklyShowModal = function () {
-    const { rows, total, weekStart, weekEnd } = buildSummary();
-    const emailBody = buildEmailBody({ rows, total, weekStart, weekEnd });
+    const summary   = buildSummary();
+    const emailBody = buildEmailBody(summary);
+    const { rows, total, weekStart, weekEnd } = summary;
 
     const tableRows = rows.length > 0
-      ? rows.map(([wh, count]) => `
-          <tr>
-            <td style="padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border)">${wh}</td>
-            <td style="padding:10px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:var(--green)">${count}</td>
-          </tr>`).join('')
-      : `<tr><td colspan="2" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No received shipments in the past 7 days.</td></tr>`;
+      ? rows.map(function(r) {
+          return '<tr>' +
+            '<td style="padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border)">' + r[0] + '</td>' +
+            '<td style="padding:10px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:var(--green)">' + r[1] + '</td>' +
+            '</tr>';
+        }).join('')
+      : '<tr><td colspan="2" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No received shipments found in the past 7 days.</td></tr>';
 
-    document.getElementById('weeklySummaryContent').innerHTML = `
-      <div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:16px">
-        Week of ${weekStart} → ${weekEnd}
-      </div>
-
-      <table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px">
-        <thead>
-          <tr style="background:var(--surface2)">
-            <th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border)">Warehouse</th>
-            <th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border)">Shipments Received</th>
-          </tr>
-        </thead>
-        <tbody>${tableRows}</tbody>
-        <tfoot>
-          <tr style="background:var(--surface2)">
-            <td style="padding:10px 14px;font-size:13px;font-weight:700;border-top:2px solid var(--border2)">Total</td>
-            <td style="padding:10px 14px;font-size:15px;font-family:var(--mono);font-weight:700;text-align:right;border-top:2px solid var(--border2);color:var(--accent2)">${total}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div style="margin-bottom:10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email Body</div>
-      <div style="position:relative">
-        <textarea id="weeklySummaryEmailBody" readonly
-          style="width:100%;min-height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-                 padding:14px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--text);
-                 resize:vertical;outline:none">${emailBody}</textarea>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:12px">
-        <button onclick="weeklyCopyEmail(this)" class="btn btn-primary" style="flex:1">
-          ⎘ Copy Email Body
-        </button>
-        <button onclick="weeklyCloseModal()" class="btn" style="border:1px solid var(--border);background:var(--surface2);color:var(--text2)">
-          Close
-        </button>
-      </div>
-    `;
+    document.getElementById('weeklySummaryContent').innerHTML =
+      '<div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:16px">Week of ' + weekStart + ' \u2192 ' + weekEnd + '</div>' +
+      '<table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px">' +
+        '<thead><tr style="background:var(--surface2)">' +
+          '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border)">Warehouse</th>' +
+          '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border)">Shipments Received</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tableRows + '</tbody>' +
+        '<tfoot><tr style="background:var(--surface2)">' +
+          '<td style="padding:10px 14px;font-size:13px;font-weight:700;border-top:2px solid var(--border2)">Total</td>' +
+          '<td style="padding:10px 14px;font-size:15px;font-family:var(--mono);font-weight:700;text-align:right;border-top:2px solid var(--border2);color:var(--accent2)">' + total + '</td>' +
+        '</tr></tfoot>' +
+      '</table>' +
+      '<div style="margin-bottom:10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email Body</div>' +
+      '<textarea id="weeklySummaryEmailBody" readonly style="width:100%;min-height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--text);resize:vertical;outline:none">' + emailBody + '</textarea>' +
+      '<div style="display:flex;gap:10px;margin-top:12px">' +
+        '<button onclick="weeklyCopyEmail(this)" class="btn btn-primary" style="flex:1">\u2398 Copy Email Body</button>' +
+        '<button onclick="weeklyCloseModal()" class="btn" style="border:1px solid var(--border);background:var(--surface2);color:var(--text2)">Close</button>' +
+      '</div>';
 
     document.getElementById('weeklySummaryModal').classList.add('show');
   };
@@ -8013,120 +7977,17 @@ This report covers shipments marked as Received between ${weekStart} and ${weekE
 
   window.weeklyCopyEmail = function (btn) {
     const ta = document.getElementById('weeklySummaryEmailBody');
-    navigator.clipboard.writeText(ta.value).then(() => {
+    navigator.clipboard.writeText(ta.value).then(function () {
       const orig = btn.innerHTML;
-      btn.innerHTML = '✓ Copied!';
+      btn.innerHTML = '\u2713 Copied!';
       btn.style.background = 'var(--green)';
       btn.style.borderColor = 'var(--green-dim)';
-      setTimeout(() => {
+      setTimeout(function () {
         btn.innerHTML = orig;
         btn.style.background = '';
         btn.style.borderColor = '';
       }, 2000);
     });
-  };
-
-  // ── GHL webhook URL persistence ───────────────────────────────────────────
-
-  const GHL_URL_KEY = 'inbound_tracker_ghl_webhook_url';
-
-  window.weeklyUrlSave = function (val) {
-    try { localStorage.setItem(GHL_URL_KEY, val.trim()); } catch(e) {}
-  };
-
-  function weeklyUrlLoad() {
-    try { return localStorage.getItem(GHL_URL_KEY) || ''; } catch(e) { return ''; }
-  }
-
-  // Restore saved URL whenever modal opens
-  const _origShow = window.weeklyShowModal;
-  window.weeklyShowModal = function () {
-    _origShow();
-    const el = document.getElementById('weeklyGhlWebhookUrl');
-    if (el) el.value = weeklyUrlLoad();
-  };
-
-  // ── Send to GHL webhook → Slack ───────────────────────────────────────────
-
-  window.weeklySendToGHL = async function (btn) {
-    const urlEl   = document.getElementById('weeklyGhlWebhookUrl');
-    const statusEl = document.getElementById('weeklySlackStatus');
-    const url = (urlEl && urlEl.value.trim()) || weeklyUrlLoad();
-
-    if (!url) {
-      statusEl.textContent = '⚠ Please paste your GHL webhook URL first.';
-      statusEl.style.color = 'var(--amber)';
-      return;
-    }
-
-    const { rows, total, weekStart, weekEnd } = buildSummary();
-
-    // Build Slack-formatted message (mrkdwn)
-    const divider = '─'.repeat(32);
-    const whLines = rows.length > 0
-      ? rows.map(([wh, count]) => `*${wh}*  —  ${count} shipment${count !== 1 ? 's' : ''}`).join('
-')
-      : '_No shipments received this week._';
-
-    const slackMessage =
-      `📦 *Weekly Shipment Summary* — ${weekStart} → ${weekEnd}
-
-` +
-      `${divider}
-` +
-      `${whLines}
-` +
-      `${divider}
-` +
-      `*Total:* ${total} shipment${total !== 1 ? 's' : ''}
-
-` +
-      `_Firstbase Ops Bot · Auto-generated_`;
-
-    // Payload GHL workflow will receive
-    const payload = {
-      week_start:     weekStart,
-      week_end:       weekEnd,
-      total_received: total,
-      slack_message:  slackMessage,
-      warehouses:     rows.map(([warehouse, count]) => ({ warehouse, count })),
-    };
-
-    const orig = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '⏳ Sending…';
-    statusEl.textContent = '';
-
-    try {
-      const res = await fetch(url, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        btn.innerHTML = '✅ Sent!';
-        btn.style.background = 'var(--green)';
-        btn.style.borderColor = 'var(--green-dim)';
-        statusEl.textContent = '✓ GHL received it — Slack message on its way.';
-        statusEl.style.color = 'var(--green)';
-      } else {
-        throw new Error('HTTP ' + res.status);
-      }
-    } catch (err) {
-      btn.innerHTML = '❌ Failed';
-      btn.style.background = 'var(--red)';
-      btn.style.borderColor = 'var(--red)';
-      statusEl.textContent = '✗ Error: ' + err.message + ' — check the URL and try again.';
-      statusEl.style.color = 'var(--red)';
-    }
-
-    setTimeout(() => {
-      btn.innerHTML = orig;
-      btn.disabled = false;
-      btn.style.background = '#4A154B';
-      btn.style.borderColor = '#4A154B';
-    }, 3000);
   };
 
 })();
