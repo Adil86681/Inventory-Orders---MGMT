@@ -4832,9 +4832,9 @@ function grvRender() {
         ${mismatchNote}
       </div>
       <div class="grv-match-actions">
-        <button class="grv-copy-btn" onclick="grvCopyText(${JSON.stringify(r.sku_id)}, this)">⎘ Copy Item Code</button>
-        <button class="grv-copy-btn" onclick="grvCopyText(${JSON.stringify(r.sku_id + '\n' + r.desc)}, this)">⎘ Copy Code + Desc</button>
-        ${r.mpn ? `<button class="grv-copy-btn" onclick="grvCopyText(${JSON.stringify(r.mpn)}, this)">⎘ Copy MPN</button>` : ''}
+        <button class="grv-copy-btn" data-grv-copy="${escHtml(r.sku_id)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy Item Code</button>
+        <button class="grv-copy-btn" data-grv-copy="${escHtml(r.sku_id + '\n' + r.desc)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy Code + Desc</button>
+        ${r.mpn ? `<button class="grv-copy-btn" data-grv-copy="${escHtml(r.mpn)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy MPN</button>` : ''}
       </div>
     </div>`;
   }).join('');
