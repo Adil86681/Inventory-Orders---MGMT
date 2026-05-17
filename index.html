@@ -7874,31 +7874,51 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
   function buildSummary() {
     const now     = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const sinceISO = weekAgo.toISOString();
-
-    // invOrders is keyed by friendlyOrderId; values have appStatus, receivedAt, warehouse
-    const orders = Object.values(typeof invOrders !== 'undefined' ? invOrders : {});
+    const sinceISO = weekAgo.toISOString().split('T')[0]; // YYYY-MM-DD for date comparisons
 
     const byWarehouse = {};
     let total = 0;
 
-    for (const o of orders) {
-      // Count orders that were received (appStatus) within the past 7 days.
-      // receivedAt is set when the user clicks "Receive" in the app.
-      // Also count API-side RECEIVED/COMPLETED statuses updated in the window.
-      const isReceived = o.appStatus === 'RECEIVED' || o.appStatus === 'COMPLETED';
-      if (!isReceived) continue;
-
-      // Use receivedAt if available, otherwise fall back to created_date
-      const ts = o.receivedAt || o.created_date || '';
-      if (ts && ts < sinceISO) continue; // outside 7-day window
-
-      const wh = o.warehouse || '(Unknown)';
-      if (isBlocked(wh)) continue;
-
-      const label = displayWh(wh);
+    function countOrder(warehouse, dateStr) {
+      if (!dateStr) return; // no date, skip
+      // dateStr can be YYYY-MM-DD or full ISO — normalise to YYYY-MM-DD
+      const day = dateStr.substring(0, 10);
+      if (day < sinceISO) return; // older than 7 days
+      if (isBlocked(warehouse)) return;
+      const label = displayWh(warehouse);
       byWarehouse[label] = (byWarehouse[label] || 0) + 1;
       total++;
+    }
+
+    // ── Source 1: invOrders (open/in-transit, manually marked received) ──────
+    // These are loaded from the live API. appStatus RECEIVED means the user
+    // clicked "Receive" in the app; receivedAt is the timestamp for that action.
+    const inv = Object.values(typeof invOrders !== 'undefined' ? invOrders : {});
+    for (const o of inv) {
+      if (o.appStatus !== 'RECEIVED' && o.appStatus !== 'COMPLETED') continue;
+      // receivedAt is the most accurate timestamp; fall back to updated_date or created_date
+      const ts = (o.receivedAt || o.created_date || '').substring(0, 10);
+      countOrder(o.warehouse, ts);
+    }
+
+    // ── Source 2: csOrders (Customer Supplied Orders) ─────────────────────────
+    const cs = Object.values(typeof csOrders !== 'undefined' ? csOrders : {});
+    for (const o of cs) {
+      if (o.appStatus !== 'RECEIVED' && o.appStatus !== 'COMPLETED') continue;
+      const ts = (o.receivedAt || o.created_date || '').substring(0, 10);
+      countOrder(o.warehouse, ts);
+    }
+
+    // ── Source 3: kpiDashRows (Google Sheet / CSV — historical received data) ─
+    // This is the richest source: it contains all RECEIVED/COMPLETED orders
+    // imported from the ops sheet, including ones not currently in the live API.
+    // Fields: warehouse, received_date (or similar) — check actual field names.
+    const kpi = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
+    for (const r of kpi) {
+      // kpiDashRows rows are already completed orders; use whichever date field exists
+      const ts = (r.received_date || r.receivedDate || r.completed_date || r.completedDate || r.date || '').substring(0, 10);
+      const wh = r.warehouse || r.Warehouse || '';
+      countOrder(wh, ts);
     }
 
     const rows = Object.entries(byWarehouse).sort((a, b) => b[1] - a[1]);
@@ -7967,7 +7987,7 @@ This report covers shipments marked as Received between ${weekStart} and ${weekE
         </tfoot>
       </table>
 
-      <div style="margin-bottom:10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email Body Preview</div>
+      <div style="margin-bottom:10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email Body</div>
       <div style="position:relative">
         <textarea id="weeklySummaryEmailBody" readonly
           style="width:100%;min-height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
@@ -8004,6 +8024,109 @@ This report covers shipments marked as Received between ${weekStart} and ${weekE
         btn.style.borderColor = '';
       }, 2000);
     });
+  };
+
+  // ── GHL webhook URL persistence ───────────────────────────────────────────
+
+  const GHL_URL_KEY = 'inbound_tracker_ghl_webhook_url';
+
+  window.weeklyUrlSave = function (val) {
+    try { localStorage.setItem(GHL_URL_KEY, val.trim()); } catch(e) {}
+  };
+
+  function weeklyUrlLoad() {
+    try { return localStorage.getItem(GHL_URL_KEY) || ''; } catch(e) { return ''; }
+  }
+
+  // Restore saved URL whenever modal opens
+  const _origShow = window.weeklyShowModal;
+  window.weeklyShowModal = function () {
+    _origShow();
+    const el = document.getElementById('weeklyGhlWebhookUrl');
+    if (el) el.value = weeklyUrlLoad();
+  };
+
+  // ── Send to GHL webhook → Slack ───────────────────────────────────────────
+
+  window.weeklySendToGHL = async function (btn) {
+    const urlEl   = document.getElementById('weeklyGhlWebhookUrl');
+    const statusEl = document.getElementById('weeklySlackStatus');
+    const url = (urlEl && urlEl.value.trim()) || weeklyUrlLoad();
+
+    if (!url) {
+      statusEl.textContent = '⚠ Please paste your GHL webhook URL first.';
+      statusEl.style.color = 'var(--amber)';
+      return;
+    }
+
+    const { rows, total, weekStart, weekEnd } = buildSummary();
+
+    // Build Slack-formatted message (mrkdwn)
+    const divider = '─'.repeat(32);
+    const whLines = rows.length > 0
+      ? rows.map(([wh, count]) => `*${wh}*  —  ${count} shipment${count !== 1 ? 's' : ''}`).join('
+')
+      : '_No shipments received this week._';
+
+    const slackMessage =
+      `📦 *Weekly Shipment Summary* — ${weekStart} → ${weekEnd}
+
+` +
+      `${divider}
+` +
+      `${whLines}
+` +
+      `${divider}
+` +
+      `*Total:* ${total} shipment${total !== 1 ? 's' : ''}
+
+` +
+      `_Firstbase Ops Bot · Auto-generated_`;
+
+    // Payload GHL workflow will receive
+    const payload = {
+      week_start:     weekStart,
+      week_end:       weekEnd,
+      total_received: total,
+      slack_message:  slackMessage,
+      warehouses:     rows.map(([warehouse, count]) => ({ warehouse, count })),
+    };
+
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Sending…';
+    statusEl.textContent = '';
+
+    try {
+      const res = await fetch(url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        btn.innerHTML = '✅ Sent!';
+        btn.style.background = 'var(--green)';
+        btn.style.borderColor = 'var(--green-dim)';
+        statusEl.textContent = '✓ GHL received it — Slack message on its way.';
+        statusEl.style.color = 'var(--green)';
+      } else {
+        throw new Error('HTTP ' + res.status);
+      }
+    } catch (err) {
+      btn.innerHTML = '❌ Failed';
+      btn.style.background = 'var(--red)';
+      btn.style.borderColor = 'var(--red)';
+      statusEl.textContent = '✗ Error: ' + err.message + ' — check the URL and try again.';
+      statusEl.style.color = 'var(--red)';
+    }
+
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.disabled = false;
+      btn.style.background = '#4A154B';
+      btn.style.borderColor = '#4A154B';
+    }, 3000);
   };
 
 })();
