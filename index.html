@@ -1055,6 +1055,7 @@
       </div>
       <button class="btn btn-danger" onclick="invClearAll()">Clear Local</button>
       <button class="btn btn-primary" onclick="weeklyShowModal()" style="background:var(--green);border-color:var(--green-dim);">📋 Weekly Summary</button>
+      <button class="btn" onclick="weeklyDebug()" style="border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;">🔍 Debug</button>
     </div>
   </div>
 
@@ -7933,6 +7934,41 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       'This report covers shipments marked as Received between ' + weekStart + ' and ' + weekEnd + '.\n\n' +
       '\u2014 Firstbase Ops Bot';
   }
+
+  window.weeklyDebug = function () {
+    const inv = Object.values(typeof invOrders !== 'undefined' ? invOrders : {});
+    const cs  = Object.values(typeof csOrders  !== 'undefined' ? csOrders  : {});
+    const kpi = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
+
+    const invStatuses  = [...new Set(inv.map(o => o.appStatus))];
+    const csStatuses   = [...new Set(cs.map(o => o.appStatus))];
+    const invSample    = inv.slice(0, 3).map(o => ({ appStatus: o.appStatus, receivedAt: o.receivedAt, created_date: o.created_date, warehouse: o.warehouse }));
+    const csSample     = cs.slice(0, 3).map(o => ({ appStatus: o.appStatus, receivedAt: o.receivedAt, created_date: o.created_date, warehouse: o.warehouse }));
+    const kpiSample    = kpi.slice(0, 3);
+    const kpiKeys      = kpi.length > 0 ? Object.keys(kpi[0]) : [];
+
+    alert(
+      'invOrders: '  + inv.length + ' orders
+' +
+      'Statuses: '   + JSON.stringify(invStatuses) + '
+' +
+      'Sample: '     + JSON.stringify(invSample, null, 2) + '
+
+' +
+      'csOrders: '   + cs.length  + ' orders
+' +
+      'Statuses: '   + JSON.stringify(csStatuses) + '
+' +
+      'Sample: '     + JSON.stringify(csSample, null, 2) + '
+
+' +
+      'kpiDashRows: '+ kpi.length + ' rows
+' +
+      'Keys: '       + JSON.stringify(kpiKeys) + '
+' +
+      'Sample: '     + JSON.stringify(kpiSample, null, 2)
+    );
+  };
 
   window.weeklyShowModal = function () {
     const summary   = buildSummary();
