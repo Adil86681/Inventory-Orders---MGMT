@@ -4705,6 +4705,9 @@ const GRV_ATTR_CONFIG = [
     { label:'Surface Laptop',      phrase:'surface laptop' },
   ]},
   { key:'processor', label:'Processor', essential:true, options:[
+    { label:'M5',           phrase:'m5' },
+    { label:'M5 Pro',       phrase:'m5 pro' },
+    { label:'M5 Max',       phrase:'m5 max' },
     { label:'M4',           phrase:'m4' },
     { label:'M4 Pro',       phrase:'m4 pro' },
     { label:'M4 Max',       phrase:'m4 max' },
@@ -4812,7 +4815,7 @@ function grvInitDropdowns() {
     group.innerHTML = `
       <label class="grv-attr-label">${escHtml(cfg.label)}${req}</label>
       <select class="grv-attr-select" id="grv-sel-${cfg.key}"
-        onchange="grvMarkSelect(this); grvOnInput()">
+        onchange="grvMarkSelect(this); grvSyncDropdowns('${cfg.key}'); grvOnInput()">
         <option value="">— Any —</option>
         ${cfg.options.map(o => `<option value="${escHtml(o.phrase)}">${escHtml(o.label)}</option>`).join('')}
       </select>`;
@@ -4823,6 +4826,82 @@ function grvInitDropdowns() {
 // Toggles the has-value class so selected dropdowns are visually highlighted
 function grvMarkSelect(sel) {
   sel.classList.toggle('has-value', sel.value !== '');
+}
+
+// Restores every dropdown to its full hardcoded option list (no filtering).
+// Called on clear or when all selections are removed.
+function grvRestoreDropdownOptions() {
+  GRV_ATTR_CONFIG.forEach(cfg => {
+    const sel = document.getElementById('grv-sel-' + cfg.key);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Any —</option>' +
+      cfg.options.map(o =>
+        `<option value="${escHtml(o.phrase)}"${o.phrase === cur ? ' selected' : ''}>${escHtml(o.label)}</option>`
+      ).join('');
+  });
+}
+
+// When a dropdown changes, update every OTHER dropdown's option list so it
+// only shows values that actually exist in the catalog given the current
+// combination of selections. Removes impossible combinations in real time.
+function grvSyncDropdowns(changedKey) {
+  if (!psCatalogLoaded || !psCatalog.length) return;
+
+  // Snapshot all current selections: { key → phrase }
+  const selections = {};
+  GRV_ATTR_CONFIG.forEach(cfg => {
+    const sel = document.getElementById('grv-sel-' + cfg.key);
+    if (sel && sel.value) selections[cfg.key] = sel.value;
+  });
+
+  // Nothing selected → restore full lists
+  if (Object.keys(selections).length === 0) {
+    grvRestoreDropdownOptions();
+    return;
+  }
+
+  // Pre-lowercase every catalog item once (reused across all dropdown updates)
+  const itemTexts = psCatalog.map(r => (r.desc + ' ' + r.mpn).toLowerCase());
+
+  GRV_ATTR_CONFIG.forEach(cfg => {
+    const sel = document.getElementById('grv-sel-' + cfg.key);
+    if (!sel) return;
+
+    // Constraints = all selected keys EXCEPT this dropdown's own key.
+    // That way this dropdown shows what's possible given everything else.
+    const constraints = Object.entries(selections)
+      .filter(([k]) => k !== cfg.key)
+      .map(([, phrase]) => phrase);
+
+    // Filter item indices down to those that satisfy all constraints
+    const validTexts = constraints.length === 0
+      ? itemTexts
+      : itemTexts.filter(txt => constraints.every(ph => txt.includes(ph)));
+
+    // Which of this dropdown's options appear in at least one valid item?
+    const available = new Set(
+      cfg.options
+        .filter(opt => validTexts.some(txt => txt.includes(opt.phrase)))
+        .map(o => o.phrase)
+    );
+
+    const currentVal = sel.value;
+
+    // Rebuild the <select> keeping only available options
+    sel.innerHTML = '<option value="">— Any —</option>' +
+      cfg.options
+        .filter(o => available.has(o.phrase))
+        .map(o =>
+          `<option value="${escHtml(o.phrase)}"${o.phrase === currentVal ? ' selected' : ''}>${escHtml(o.label)}</option>`
+        ).join('');
+
+    // If the previously selected value has been filtered out, reset this dropdown
+    if (currentVal && !available.has(currentVal)) {
+      sel.value = '';
+      sel.classList.remove('has-value');
+    }
+  });
 }
 
 // Collects the phrase from every non-empty dropdown
@@ -4849,6 +4928,7 @@ function grvClear() {
     const sel = document.getElementById('grv-sel-' + cfg.key);
     if (sel) { sel.value = ''; sel.classList.remove('has-value'); }
   });
+  grvRestoreDropdownOptions();   // restore all full option lists
   document.getElementById('grv-results').innerHTML = '';
   document.getElementById('grv-hint').textContent = '';
   document.getElementById('grv-input').focus();
@@ -4881,9 +4961,9 @@ const GRV_EXPAND = {
   '256g':'256gb ssd','512g':'512gb ssd','1t':'1tb ssd','2t':'2tb ssd','4t':'4tb ssd',
   '256gb':'256gb ssd','512gb':'512gb ssd','1tb':'1tb ssd','2tb':'2tb ssd','4tb':'4tb ssd',
   // Apple silicon
-  'm1pro':'m1 pro','m2pro':'m2 pro','m3pro':'m3 pro','m4pro':'m4 pro',
-  'm1max':'m1 max','m2max':'m2 max','m3max':'m3 max','m4max':'m4 max',
-  'm4p':'m4 pro','m3p':'m3 pro','m2p':'m2 pro','m1p':'m1 pro',
+  'm1pro':'m1 pro','m2pro':'m2 pro','m3pro':'m3 pro','m4pro':'m4 pro','m5pro':'m5 pro',
+  'm1max':'m1 max','m2max':'m2 max','m3max':'m3 max','m4max':'m4 max','m5max':'m5 max',
+  'm5p':'m5 pro','m4p':'m4 pro','m3p':'m3 pro','m2p':'m2 pro','m1p':'m1 pro',
   // Intel Core Ultra processor series
   'u5':'core ultra 5','u7':'core ultra 7','u9':'core ultra 9',
   'coreu5':'core ultra 5','coreu7':'core ultra 7','coreu9':'core ultra 9',
@@ -5078,9 +5158,9 @@ function grvDetectEssentials(phrases) {
   // PROCESSOR — ordered most-specific first
   const procTests = [
     // Apple Silicon with tier
-    { re: /^m[1-4] (pro|max|ultra)$/, fn: ph => ({ phrase: ph, label: ph.replace(/^m/, 'M').replace(/ (pro|max|ultra)$/, s => s.charAt(1).toUpperCase() + s.slice(2)) }) },
+    { re: /^m[1-5] (pro|max|ultra)$/, fn: ph => ({ phrase: ph, label: ph.replace(/^m/, 'M').replace(/ (pro|max|ultra)$/, s => s.charAt(1).toUpperCase() + s.slice(2)) }) },
     // Apple Silicon base
-    { re: /^m[1-4]$/, fn: ph => ({ phrase: ph, label: ph.toUpperCase() }) },
+    { re: /^m[1-5]$/, fn: ph => ({ phrase: ph, label: ph.toUpperCase() }) },
     // Intel Core Ultra (expanded form)
     { re: /^core ultra [579]$/, fn: ph => ({ phrase: ph, label: 'Intel ' + ph.replace(/^c/, 'C') }) },
     // Intel Core Ultra (pair form typed by user, e.g. "ultra 7")
