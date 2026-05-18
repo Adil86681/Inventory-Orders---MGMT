@@ -8,7 +8,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<style>:root { color-scheme: light; }  /* Email draft modal + selection-checkbox column */
+<style>:root {
+    color-scheme: light;
+    --card:         #f6f2e8;
+    --shadow-hover: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
+    --primary-dark: #3a5a91;
+    --primary-light: rgba(77,111,168,0.12);
+    --success:      #4a7c4a;
+    --success-bg:   rgba(74,124,74,0.12);
+    --text-muted:   #8a826e;
+  }  /* Email draft modal + selection-checkbox column */
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.55); display: none; align-items: flex-start; justify-content: center; z-index: 1000; padding: 60px 16px 16px; }
   .modal-backdrop.show { display: flex; }
   .modal { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-hover); max-width: 1100px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; }
