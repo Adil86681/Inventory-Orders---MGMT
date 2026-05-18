@@ -1063,8 +1063,6 @@
         </div>
       </div>
       <button class="btn btn-danger" onclick="invClearAll()">Clear Local</button>
-      <button class="btn btn-primary" onclick="weeklyShowModal()" style="background:var(--green);border-color:var(--green-dim);">📋 Weekly Summary</button>
-      <button class="btn" onclick="weeklyDebug()" style="border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;">🔍 Debug</button>
     </div>
   </div>
 
@@ -1541,6 +1539,7 @@
     </div>
     <div class="page-actions">
       <button class="btn btn-primary" onclick="kpiDashLoad()">↻ Refresh</button>
+      <button class="btn btn-primary" onclick="kpiWeeklyShowModal()" style="background:var(--green);border-color:var(--green-dim);">📋 Weekly Summary</button>
       <a class="btn btn-danger" href="https://docs.google.com/spreadsheets/d/1iN9TeaadP4UPqOUrvUKRRkD4-CK3CLNncYQ-Xl2ohck/" target="_blank" rel="noopener">Open sheet ↗</a>
     </div>
   </div>
@@ -7846,15 +7845,15 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
 })();
 </script>
 
-<!-- ═══ WEEKLY SUMMARY MODAL ═══ -->
-<div class="modal-backdrop" id="weeklySummaryModal" onclick="if(event.target===this)weeklyCloseModal()">
-  <div class="modal" style="max-width:640px">
-    <div class="modal-header">
-      <h2>📋 Weekly Shipment Summary</h2>
-      <button class="modal-close" onclick="weeklyCloseModal()">✕</button>
+<!-- ═══ KPI WEEKLY SUMMARY MODAL ═══ -->
+<div class="modal-backdrop" id="kpiWeeklySummaryModal" onclick="if(event.target===this)kpiWeeklyCloseModal()">
+  <div class="modal" style="max-width:660px;background:var(--surface);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.18);display:flex;flex-direction:column;max-height:84vh;overflow:hidden;">
+    <div class="modal-header" style="padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <h2 style="font-size:17px;font-weight:600;margin:0;color:var(--text);">📋 Weekly Shipment Summary</h2>
+      <button onclick="kpiWeeklyCloseModal()" style="background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:6px;line-height:1;">✕</button>
     </div>
-    <div class="modal-body">
-      <div id="weeklySummaryContent"></div>
+    <div style="padding:18px 22px;overflow-y:auto;flex:1;">
+      <div id="kpiWeeklySummaryContent"></div>
     </div>
   </div>
 </div>
@@ -7862,169 +7861,215 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
 <script>
 (function () {
 
-  function fmtDate(d) {
-    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  /* ── helpers (re-use globals already defined in the dashboard) ── */
+  function prevWeekRange() {
+    var now = new Date();
+    var thisKey = kpiIsoWeekKey(now);
+    var thisRange = kpiWeekRangeFromKey(thisKey);
+    var prevMonday = new Date(thisRange.start.getTime() - 7 * 86400000);
+    var prevKey = kpiIsoWeekKey(prevMonday);
+    return kpiWeekRangeFromKey(prevKey);
   }
 
-  function displayWh(name) {
-    return (name || '').replace(/^Warehouse\s*-?\s*/i, '').trim() || name || '(Unknown)';
+  function fmtShort(d) {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  const BLOCKED = new Set(['slc', 'warehouse - slc', 'warehouse slc', 'slc verint', 'warehouse - uk']);
-  function isBlocked(name) {
-    if (!name) return false;
-    const n = name.toLowerCase().trim();
-    return BLOCKED.has(n) || BLOCKED.has(n.replace(/^warehouse\s*-?\s*/, ''));
+  function escHTML(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function buildSummary() {
-    const now      = new Date();
-    const weekAgo  = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const sinceISO = weekAgo.toISOString().substring(0, 10); // YYYY-MM-DD
+  /* ── core summary builder ── */
+  function buildKpiWeeklySummary() {
+    var range    = prevWeekRange();
+    var startISO = range.start.toISOString().slice(0, 10);
+    var endISO   = range.end.toISOString().slice(0, 10);   // Sunday (inclusive)
 
-    const byWarehouse = {};
-    let total = 0;
+    var rows = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
+    var byWh = {};   // { warehouse: { total, met, missed } }
+    var grandTotal = 0;
 
-    function countOrder(warehouse, dateStr) {
-      if (!dateStr) return;
-      const day = String(dateStr).substring(0, 10);
-      if (day < sinceISO) return;
-      if (isBlocked(warehouse)) return;
-      const label = displayWh(warehouse);
-      byWarehouse[label] = (byWarehouse[label] || 0) + 1;
-      total++;
-    }
+    rows.forEach(function (r) {
+      // Must have both timestamps (completed order)
+      if (!r.at_facility_at || !r.completed_at) return;
 
-    // Source 1: invOrders (live API inventory orders marked received in-app)
-    const inv = Object.values(typeof invOrders !== 'undefined' ? invOrders : {});
-    for (const o of inv) {
-      if (o.appStatus !== 'RECEIVED' && o.appStatus !== 'COMPLETED') continue;
-      const ts = (o.receivedAt || o.created_date || '').substring(0, 10);
-      countOrder(o.warehouse, ts);
-    }
+      // Bucket by completed_at date
+      var completedDate = kpiParseDate(r.completed_at);
+      if (!completedDate) return;
+      var completedISO = completedDate.toISOString().slice(0, 10);
+      if (completedISO < startISO || completedISO > endISO) return;
 
-    // Source 2: csOrders (Customer Supplied Orders marked received)
-    const cs = Object.values(typeof csOrders !== 'undefined' ? csOrders : {});
-    for (const o of cs) {
-      if (o.appStatus !== 'RECEIVED' && o.appStatus !== 'COMPLETED') continue;
-      const ts = (o.receivedAt || o.created_date || '').substring(0, 10);
-      countOrder(o.warehouse, ts);
-    }
+      var wh = (r.warehouse || '(Unknown)').replace(/^Warehouse\s*-\s*/i, '').trim() || '(Unknown)';
+      if (!byWh[wh]) byWh[wh] = { total: 0, met: 0, missed: 0 };
+      byWh[wh].total++;
+      grandTotal++;
 
-    // Source 3: kpiDashRows (sheet/CSV historical received orders)
-    const kpi = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
-    for (const r of kpi) {
-      const ts = (r.received_date || r.receivedDate || r.completed_date || r.completedDate || r.date || '').substring(0, 10);
-      const wh = r.warehouse || r.Warehouse || '';
-      countOrder(wh, ts);
-    }
+      // SLO: ≤ 2 business days from at_facility_at → completed_at
+      var start  = kpiParseDate(r.at_facility_at);
+      var end    = kpiParseDate(r.completed_at);
+      if (start && end) {
+        var bizDays = kpiBusinessDaysBetween(start, end);
+        if (bizDays !== null) {
+          if (bizDays <= KPI_SLO_DAYS) byWh[wh].met++;
+          else                         byWh[wh].missed++;
+        }
+      }
+    });
 
-    const rows = Object.entries(byWarehouse).sort((a, b) => b[1] - a[1]);
-    return { rows, total, weekStart: fmtDate(weekAgo), weekEnd: fmtDate(now) };
+    // Sort by total descending
+    var whRows = Object.keys(byWh).sort(function (a, b) {
+      return byWh[b].total - byWh[a].total;
+    }).map(function (wh) {
+      var d = byWh[wh];
+      var sloEval = d.met + d.missed;
+      var sloPct  = sloEval > 0 ? (d.met / sloEval * 100).toFixed(1) : null;
+      return { wh: wh, total: d.total, met: d.met, missed: d.missed, sloEval: sloEval, sloPct: sloPct };
+    });
+
+    // Overall SLO
+    var overallMet    = whRows.reduce(function (s, r) { return s + r.met;    }, 0);
+    var overallMissed = whRows.reduce(function (s, r) { return s + r.missed; }, 0);
+    var overallEval   = overallMet + overallMissed;
+    var overallPct    = overallEval > 0 ? (overallMet / overallEval * 100).toFixed(1) : null;
+
+    return {
+      weekStart:    fmtShort(range.start),
+      weekEnd:      fmtShort(range.end),
+      grandTotal:   grandTotal,
+      whRows:       whRows,
+      overallMet:   overallMet,
+      overallMissed:overallMissed,
+      overallEval:  overallEval,
+      overallPct:   overallPct
+    };
   }
 
-  function buildEmailBody({ rows, total, weekStart, weekEnd }) {
-    const divider = '─'.repeat(36);
-    const whLines = rows.length > 0
-      ? rows.map(([wh, count]) =>
-          '  ' + wh.padEnd(24) + ' ' + String(count).padStart(4) + ' shipment' + (count !== 1 ? 's' : '')
-        ).join('\n')
-      : '  No shipments received this week.';
+  /* ── SLO colour helper ── */
+  function sloColor(pct) {
+    if (pct === null) return 'var(--muted)';
+    if (pct >= 90)   return 'var(--green)';
+    if (pct >= 75)   return 'var(--amber)';
+    return 'var(--red)';
+  }
+
+  /* ── email body builder ── */
+  function buildKpiWeeklyEmailBody(s) {
+    var div = '─'.repeat(40);
+    var header = 'Weekly Shipment Summary — ' + s.weekStart + ' – ' + s.weekEnd;
+
+    var whLines = s.whRows.length > 0
+      ? s.whRows.map(function (r) {
+          var pct  = r.sloPct !== null ? r.sloPct + '%' : 'N/A';
+          var flag = r.sloPct !== null ? (parseFloat(r.sloPct) >= 90 ? '✓' : (parseFloat(r.sloPct) >= 75 ? '~' : '✗')) : '-';
+          return '  ' + r.wh.padEnd(22) +
+                 String(r.total).padStart(4) + ' received   ' +
+                 pct.padStart(6) + ' SLO  ' + flag;
+        }).join('\n')
+      : '  No completed shipments found for this period.';
+
+    var overallPctStr = s.overallPct !== null ? s.overallPct + '%' : 'N/A';
+    var overallFlag   = s.overallPct !== null
+      ? (parseFloat(s.overallPct) >= 90 ? '✓' : (parseFloat(s.overallPct) >= 75 ? '~' : '✗'))
+      : '-';
 
     return 'Hi Team,\n\n' +
-      'Here\'s your weekly inbound shipment summary for the week of ' + weekStart + ' \u2013 ' + weekEnd + '.\n\n' +
-      divider + '\n' +
-      'SHIPMENTS RECEIVED BY WAREHOUSE\n' +
-      divider + '\n' +
+      header + '\n\n' +
+      div + '\n' +
+      'SHIPMENTS RECEIVED LAST WEEK\n' +
+      div + '\n' +
+      '  Total across all warehouses: ' + s.grandTotal + ' shipment' + (s.grandTotal !== 1 ? 's' : '') + '\n\n' +
+      div + '\n' +
+      'SLO PERFORMANCE BY WAREHOUSE  (≤ 2 business days · at-facility → completed)\n' +
+      div + '\n' +
       whLines + '\n' +
-      divider + '\n' +
-      '  ' + 'TOTAL'.padEnd(24) + ' ' + String(total).padStart(4) + ' shipment' + (total !== 1 ? 's' : '') + '\n' +
-      divider + '\n\n' +
-      'This report covers shipments marked as Received between ' + weekStart + ' and ' + weekEnd + '.\n\n' +
-      '\u2014 Firstbase Ops Bot';
+      div + '\n' +
+      '  ' + 'Overall'.padEnd(22) +
+      String(s.grandTotal).padStart(4) + ' received   ' +
+      overallPctStr.padStart(6) + ' SLO  ' + overallFlag + '\n' +
+      div + '\n\n' +
+      '— Firstbase Ops Bot';
   }
 
-  window.weeklyDebug = function () {
-    const inv = Object.values(typeof invOrders !== 'undefined' ? invOrders : {});
-    const cs  = Object.values(typeof csOrders  !== 'undefined' ? csOrders  : {});
-    const kpi = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
+  /* ── modal render ── */
+  window.kpiWeeklyShowModal = function () {
+    if (typeof kpiDashRows === 'undefined' || kpiDashRows.length === 0) {
+      alert('No KPI data loaded yet — click “↻ Refresh” first.');
+      return;
+    }
 
-    const invStatuses  = [...new Set(inv.map(o => o.appStatus))];
-    const csStatuses   = [...new Set(cs.map(o => o.appStatus))];
-    const invSample    = inv.slice(0, 3).map(o => ({ appStatus: o.appStatus, receivedAt: o.receivedAt, created_date: o.created_date, warehouse: o.warehouse }));
-    const csSample     = cs.slice(0, 3).map(o => ({ appStatus: o.appStatus, receivedAt: o.receivedAt, created_date: o.created_date, warehouse: o.warehouse }));
-    const kpiSample    = kpi.slice(0, 3);
-    const kpiKeys      = kpi.length > 0 ? Object.keys(kpi[0]) : [];
+    var s = buildKpiWeeklySummary();
+    var emailBody = buildKpiWeeklyEmailBody(s);
 
-    alert(
-      'invOrders: '  + inv.length + ' orders
-' +
-      'Statuses: '   + JSON.stringify(invStatuses) + '
-' +
-      'Sample: '     + JSON.stringify(invSample, null, 2) + '
-
-' +
-      'csOrders: '   + cs.length  + ' orders
-' +
-      'Statuses: '   + JSON.stringify(csStatuses) + '
-' +
-      'Sample: '     + JSON.stringify(csSample, null, 2) + '
-
-' +
-      'kpiDashRows: '+ kpi.length + ' rows
-' +
-      'Keys: '       + JSON.stringify(kpiKeys) + '
-' +
-      'Sample: '     + JSON.stringify(kpiSample, null, 2)
-    );
-  };
-
-  window.weeklyShowModal = function () {
-    const summary   = buildSummary();
-    const emailBody = buildEmailBody(summary);
-    const { rows, total, weekStart, weekEnd } = summary;
-
-    const tableRows = rows.length > 0
-      ? rows.map(function(r) {
+    var tableRows = s.whRows.length > 0
+      ? s.whRows.map(function (r) {
+          var pctStr  = r.sloPct !== null ? r.sloPct + '%' : '—';
+          var pctColor = sloColor(r.sloPct !== null ? parseFloat(r.sloPct) : null);
           return '<tr>' +
-            '<td style="padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border)">' + r[0] + '</td>' +
-            '<td style="padding:10px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:var(--green)">' + r[1] + '</td>' +
+            '<td style="padding:9px 14px;font-size:13px;border-bottom:1px solid var(--border)">' + escHTML(r.wh) + '</td>' +
+            '<td style="padding:9px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:var(--accent2)">' + r.total + '</td>' +
+            '<td style="padding:9px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);font-weight:700;color:' + pctColor + '">' + pctStr + '</td>' +
+            '<td style="padding:9px 14px;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);color:var(--green)">' + r.met + '</td>' +
+            '<td style="padding:9px 14px;font-size:12px;font-family:var(--mono);text-align:right;border-bottom:1px solid var(--border);color:' + (r.missed > 0 ? 'var(--red)' : 'var(--text2)') + '">' + r.missed + '</td>' +
             '</tr>';
         }).join('')
-      : '<tr><td colspan="2" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No received shipments found in the past 7 days.</td></tr>';
+      : '<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No completed shipments found for this period.</td></tr>';
 
-    document.getElementById('weeklySummaryContent').innerHTML =
-      '<div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:16px">Week of ' + weekStart + ' \u2192 ' + weekEnd + '</div>' +
+    var overallPctStr   = s.overallPct !== null ? s.overallPct + '%' : '—';
+    var overallPctColor = sloColor(s.overallPct !== null ? parseFloat(s.overallPct) : null);
+    var thStyle = 'padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;';
+    var thStyleL = thStyle.replace('text-align:right', 'text-align:left');
+
+    document.getElementById('kpiWeeklySummaryContent').innerHTML =
+      '<div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">Previous week</div>' +
+      '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">' + escHTML(s.weekStart) + ' – ' + escHTML(s.weekEnd) + '</div>' +
+
+      // Total received callout
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:baseline;gap:10px">' +
+        '<span style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--accent2)">' + s.grandTotal + '</span>' +
+        '<span style="font-size:14px;color:var(--text2)">shipments received across all warehouses</span>' +
+      '</div>' +
+
+      // Per-warehouse table
+      '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">SLO by warehouse <span style="font-weight:400;text-transform:none;letter-spacing:0">&mdash; &le;2 business days, at-facility &rarr; completed</span></div>' +
       '<table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px">' +
         '<thead><tr style="background:var(--surface2)">' +
-          '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border)">Warehouse</th>' +
-          '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border)">Shipments Received</th>' +
+          '<th style="' + thStyleL + '">Warehouse</th>' +
+          '<th style="' + thStyle  + '">Received</th>' +
+          '<th style="' + thStyle  + '">% SLO</th>' +
+          '<th style="' + thStyle  + '">In SLO</th>' +
+          '<th style="' + thStyle  + '">Missed</th>' +
         '</tr></thead>' +
         '<tbody>' + tableRows + '</tbody>' +
         '<tfoot><tr style="background:var(--surface2)">' +
-          '<td style="padding:10px 14px;font-size:13px;font-weight:700;border-top:2px solid var(--border2)">Total</td>' +
-          '<td style="padding:10px 14px;font-size:15px;font-family:var(--mono);font-weight:700;text-align:right;border-top:2px solid var(--border2);color:var(--accent2)">' + total + '</td>' +
+          '<td style="padding:9px 14px;font-size:13px;font-weight:700;border-top:2px solid var(--border2)">Overall</td>' +
+          '<td style="padding:9px 14px;font-size:14px;font-family:var(--mono);font-weight:700;text-align:right;border-top:2px solid var(--border2);color:var(--accent2)">' + s.grandTotal + '</td>' +
+          '<td style="padding:9px 14px;font-size:14px;font-family:var(--mono);font-weight:700;text-align:right;border-top:2px solid var(--border2);color:' + overallPctColor + '">' + overallPctStr + '</td>' +
+          '<td style="padding:9px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border2);color:var(--green)">' + s.overallMet + '</td>' +
+          '<td style="padding:9px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border2);color:' + (s.overallMissed > 0 ? 'var(--red)' : 'var(--text2)') + '">' + s.overallMissed + '</td>' +
         '</tr></tfoot>' +
       '</table>' +
-      '<div style="margin-bottom:10px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email Body</div>' +
-      '<textarea id="weeklySummaryEmailBody" readonly style="width:100%;min-height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--text);resize:vertical;outline:none">' + emailBody + '</textarea>' +
+
+      // Email body
+      '<div style="margin-bottom:8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email body</div>' +
+      '<textarea id="kpiWeeklyEmailBody" readonly style="width:100%;min-height:200px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--text);resize:vertical;outline:none">' + emailBody + '</textarea>' +
       '<div style="display:flex;gap:10px;margin-top:12px">' +
-        '<button onclick="weeklyCopyEmail(this)" class="btn btn-primary" style="flex:1">\u2398 Copy Email Body</button>' +
-        '<button onclick="weeklyCloseModal()" class="btn" style="border:1px solid var(--border);background:var(--surface2);color:var(--text2)">Close</button>' +
+        '<button onclick="kpiWeeklyCopyEmail(this)" class="btn btn-primary" style="flex:1">⎘ Copy Email Body</button>' +
+        '<button onclick="kpiWeeklyCloseModal()" class="btn" style="border:1px solid var(--border);background:var(--surface2);color:var(--text2)">Close</button>' +
       '</div>';
 
-    document.getElementById('weeklySummaryModal').classList.add('show');
+    document.getElementById('kpiWeeklySummaryModal').classList.add('show');
   };
 
-  window.weeklyCloseModal = function () {
-    document.getElementById('weeklySummaryModal').classList.remove('show');
+  window.kpiWeeklyCloseModal = function () {
+    document.getElementById('kpiWeeklySummaryModal').classList.remove('show');
   };
 
-  window.weeklyCopyEmail = function (btn) {
-    const ta = document.getElementById('weeklySummaryEmailBody');
+  window.kpiWeeklyCopyEmail = function (btn) {
+    var ta = document.getElementById('kpiWeeklyEmailBody');
     navigator.clipboard.writeText(ta.value).then(function () {
-      const orig = btn.innerHTML;
-      btn.innerHTML = '\u2713 Copied!';
+      var orig = btn.innerHTML;
+      btn.innerHTML = '✓ Copied!';
       btn.style.background = 'var(--green)';
       btn.style.borderColor = 'var(--green-dim)';
       setTimeout(function () {
