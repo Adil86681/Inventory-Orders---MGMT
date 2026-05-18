@@ -678,6 +678,45 @@
   }
   .grv-highlight { background: rgba(61,111,255,0.18); border-radius: 2px; color: var(--accent2); padding: 0 1px; }
 
+  /* Attribute selector grid */
+  .grv-attrs { margin-bottom: 20px; }
+  .grv-attrs-section-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+  }
+  .grv-attrs-section-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .grv-attrs-row {
+    display: grid; gap: 8px; margin-bottom: 4px;
+  }
+  .grv-attrs-row.essential  { grid-template-columns: repeat(4, 1fr); }
+  .grv-attrs-row.optional   { grid-template-columns: repeat(4, 1fr); }
+  @media(max-width:900px) {
+    .grv-attrs-row.essential, .grv-attrs-row.optional { grid-template-columns: repeat(2, 1fr); }
+  }
+  .grv-attr-group { display: flex; flex-direction: column; gap: 4px; }
+  .grv-attr-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--text2);
+  }
+  .grv-attr-label .grv-req { color: var(--accent2); margin-left: 2px; }
+  .grv-attr-select {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+    padding: 7px 10px; font-size: 12.5px; color: var(--text); font-family: var(--sans);
+    cursor: pointer; outline: none; transition: border-color .15s;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a826e'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+    padding-right: 28px;
+  }
+  .grv-attr-select:focus  { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61,111,255,0.1); }
+  .grv-attr-select.has-value { border-color: var(--accent); background-color: rgba(61,111,255,0.06); color: var(--accent2); font-weight: 600; }
+  .grv-divider { border: none; border-top: 1px solid var(--border); margin: 18px 0 16px; }
+  .grv-text-label {
+    font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 8px;
+  }
+
   .ps-parsed-filters {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 8px 10px; margin-bottom: 14px; padding: 12px 14px;
@@ -1508,18 +1547,35 @@
   <!-- GRV Search sub-panel -->
   <div class="ps-subtab-panel" id="ps-panel-grv">
     <div class="grv-search-box">
+
+      <!-- ── Attribute dropdowns ── -->
+      <div class="grv-attrs" id="grv-attrs">
+        <div class="grv-attrs-section-label">Essential</div>
+        <div class="grv-attrs-row essential" id="grv-essential-row">
+          <!-- populated by grvInitDropdowns() -->
+        </div>
+        <div class="grv-attrs-section-label" style="margin-top:14px">Optional</div>
+        <div class="grv-attrs-row optional" id="grv-optional-row">
+          <!-- populated by grvInitDropdowns() -->
+        </div>
+      </div>
+
+      <hr class="grv-divider">
+
+      <!-- ── Free-text search ── -->
+      <div class="grv-text-label">Or type a free-form description — shorthands like MBA13, M4P, 14cC, 16G, EU work too</div>
       <div class="grv-search-row">
         <div class="grv-input-wrap">
           <span class="grv-search-icon">⌕</span>
           <input type="text" id="grv-input"
-            placeholder="Paste or type an item description, e.g. MBA13 M4 10cC 24G 256G Midnight EU…"
+            placeholder="e.g. ThinkPad X1 Carbon Gen 12 Ultra 7 155H 16GB 512GB US English…"
             oninput="grvOnInput()"
             onkeydown="if(event.key==='Escape'){grvClear()}"
             autocomplete="off" spellcheck="false">
         </div>
-        <button class="ps-clear-btn" onclick="grvClear()">✕ Clear</button>
+        <button class="ps-clear-btn" onclick="grvClear()">✕ Clear all</button>
       </div>
-      <div class="grv-hint" id="grv-hint">Type any part of a description — abbreviations like MBA13, M4, 24G, EU work too</div>
+      <div class="grv-hint" id="grv-hint"></div>
     </div>
 
     <div class="grv-results-wrap" id="grv-results"></div>
@@ -4463,6 +4519,8 @@ async function psLoadCatalog(force = false) {
     loading.style.display = 'none';
     wrap.style.display    = '';
     psRender();
+    // If GRV search has pending input (dropdown or text set before catalog loaded), re-run it now
+    grvRender();
   } catch(err) {
     loading.style.display = 'none';
     noLoad.style.display  = 'block';
@@ -4618,6 +4676,165 @@ function psSwitchSubtab(tab) {
   }
 }
 
+// ─── GRV ATTRIBUTE CONFIG ────────────────────────────────────────────────────
+// Each entry defines a dropdown. `phrase` is the exact string fed into the
+// search engine — matches what grvDetectEssentials and grvScore expect.
+const GRV_ATTR_CONFIG = [
+  // ── Essential ──────────────────────────────────────────────────────────────
+  { key:'model', label:'Model', essential:true, options:[
+    { label:'MacBook Air',         phrase:'macbook air' },
+    { label:'MacBook Air 13"',     phrase:'macbook air 13' },
+    { label:'MacBook Air 15"',     phrase:'macbook air 15' },
+    { label:'MacBook Pro',         phrase:'macbook pro' },
+    { label:'MacBook Pro 14"',     phrase:'macbook pro 14' },
+    { label:'MacBook Pro 16"',     phrase:'macbook pro 16' },
+    { label:'ThinkPad X1 Carbon',  phrase:'x1 carbon' },
+    { label:'ThinkPad X1 Extreme', phrase:'x1 extreme' },
+    { label:'ThinkPad T14',        phrase:'thinkpad t14' },
+    { label:'ThinkPad T16',        phrase:'thinkpad t16' },
+    { label:'ThinkPad L14',        phrase:'thinkpad l14' },
+    { label:'ThinkPad L15',        phrase:'thinkpad l15' },
+    { label:'ThinkPad (any)',       phrase:'thinkpad' },
+    { label:'Dell XPS 13',         phrase:'xps 13' },
+    { label:'Dell XPS 15',         phrase:'xps 15' },
+    { label:'Dell XPS 17',         phrase:'xps 17' },
+    { label:'Dell Latitude',       phrase:'latitude' },
+    { label:'HP EliteBook',        phrase:'elitebook' },
+    { label:'HP ProBook',          phrase:'probook' },
+    { label:'Surface Pro',         phrase:'surface pro' },
+    { label:'Surface Laptop',      phrase:'surface laptop' },
+  ]},
+  { key:'processor', label:'Processor', essential:true, options:[
+    { label:'M4',           phrase:'m4' },
+    { label:'M4 Pro',       phrase:'m4 pro' },
+    { label:'M4 Max',       phrase:'m4 max' },
+    { label:'M3',           phrase:'m3' },
+    { label:'M3 Pro',       phrase:'m3 pro' },
+    { label:'M3 Max',       phrase:'m3 max' },
+    { label:'M2',           phrase:'m2' },
+    { label:'M2 Pro',       phrase:'m2 pro' },
+    { label:'M2 Max',       phrase:'m2 max' },
+    { label:'M1',           phrase:'m1' },
+    { label:'M1 Pro',       phrase:'m1 pro' },
+    { label:'M1 Max',       phrase:'m1 max' },
+    { label:'Core Ultra 5', phrase:'core ultra 5' },
+    { label:'Core Ultra 7', phrase:'core ultra 7' },
+    { label:'Core Ultra 9', phrase:'core ultra 9' },
+    { label:'Core i5',      phrase:'core i5' },
+    { label:'Core i7',      phrase:'core i7' },
+    { label:'Core i9',      phrase:'core i9' },
+    { label:'Ryzen 5',      phrase:'ryzen 5' },
+    { label:'Ryzen 7',      phrase:'ryzen 7' },
+    { label:'Ryzen 9',      phrase:'ryzen 9' },
+  ]},
+  { key:'ram', label:'RAM', essential:true, options:[
+    { label:'8GB',   phrase:'8gb ram' },
+    { label:'16GB',  phrase:'16gb ram' },
+    { label:'24GB',  phrase:'24gb ram' },
+    { label:'32GB',  phrase:'32gb ram' },
+    { label:'36GB',  phrase:'36gb ram' },
+    { label:'48GB',  phrase:'48gb ram' },
+    { label:'64GB',  phrase:'64gb ram' },
+    { label:'96GB',  phrase:'96gb ram' },
+    { label:'128GB', phrase:'128gb ram' },
+  ]},
+  { key:'ssd', label:'SSD', essential:true, options:[
+    { label:'256GB', phrase:'256gb ssd' },
+    { label:'512GB', phrase:'512gb ssd' },
+    { label:'1TB',   phrase:'1tb ssd' },
+    { label:'2TB',   phrase:'2tb ssd' },
+    { label:'4TB',   phrase:'4tb ssd' },
+  ]},
+  // ── Optional ───────────────────────────────────────────────────────────────
+  { key:'screen', label:'Screen Size', essential:false, options:[
+    { label:'13"',   phrase:'13' },
+    { label:'13.3"', phrase:'13.3' },
+    { label:'13.6"', phrase:'13.6' },
+    { label:'14"',   phrase:'14' },
+    { label:'14.2"', phrase:'14.2' },
+    { label:'15"',   phrase:'15' },
+    { label:'15.3"', phrase:'15.3' },
+    { label:'16"',   phrase:'16' },
+    { label:'16.2"', phrase:'16.2' },
+  ]},
+  { key:'color', label:'Color', essential:false, options:[
+    { label:'Midnight',         phrase:'midnight' },
+    { label:'Silver',           phrase:'silver' },
+    { label:'Starlight',        phrase:'starlight' },
+    { label:'Space Black',      phrase:'space black' },
+    { label:'Sky Blue',         phrase:'sky blue' },
+    { label:'Natural Titanium', phrase:'natural titanium' },
+    { label:'Black Titanium',   phrase:'black titanium' },
+    { label:'White Titanium',   phrase:'white titanium' },
+    { label:'Space Gray',       phrase:'space gray' },
+  ]},
+  { key:'keyboard', label:'Keyboard', essential:false, options:[
+    { label:'US English',            phrase:'us english kb' },
+    { label:'UK English',            phrase:'uk english kb' },
+    { label:'International English', phrase:'international english kb' },
+    { label:'German',    phrase:'german kb' },
+    { label:'French',    phrase:'french kb' },
+    { label:'Spanish',   phrase:'spanish kb' },
+    { label:'Italian',   phrase:'italian kb' },
+    { label:'Portuguese',phrase:'portuguese kb' },
+    { label:'Dutch',     phrase:'dutch kb' },
+    { label:'Swedish',   phrase:'swedish kb' },
+    { label:'Norwegian', phrase:'norwegian kb' },
+    { label:'Danish',    phrase:'danish kb' },
+    { label:'Japanese',  phrase:'japanese kb' },
+    { label:'Korean',    phrase:'korean kb' },
+    { label:'Arabic',    phrase:'arabic kb' },
+  ]},
+  { key:'plug', label:'Plug', essential:false, options:[
+    { label:'EU Plug',    phrase:'eu plug' },
+    { label:'UK Plug',    phrase:'uk plug' },
+    { label:'US/CA Plug', phrase:'us/ca plug' },
+    { label:'AU Plug',    phrase:'au plug' },
+    { label:'AU/NZ Plug', phrase:'au/nz plug' },
+    { label:'JP Plug',    phrase:'jp plug' },
+    { label:'SG Plug',    phrase:'sg plug' },
+    { label:'IN Plug',    phrase:'in plug' },
+    { label:'BR Plug',    phrase:'br plug' },
+    { label:'KR Plug',    phrase:'kr plug' },
+  ]},
+];
+
+// Build and inject all dropdown elements from GRV_ATTR_CONFIG
+function grvInitDropdowns() {
+  const essRow = document.getElementById('grv-essential-row');
+  const optRow = document.getElementById('grv-optional-row');
+  if (!essRow || !optRow) return;
+
+  GRV_ATTR_CONFIG.forEach(cfg => {
+    const group = document.createElement('div');
+    group.className = 'grv-attr-group';
+    const req = cfg.essential ? '<span class="grv-req">*</span>' : '';
+    group.innerHTML = `
+      <label class="grv-attr-label">${escHtml(cfg.label)}${req}</label>
+      <select class="grv-attr-select" id="grv-sel-${cfg.key}"
+        onchange="grvMarkSelect(this); grvOnInput()">
+        <option value="">— Any —</option>
+        ${cfg.options.map(o => `<option value="${escHtml(o.phrase)}">${escHtml(o.label)}</option>`).join('')}
+      </select>`;
+    (cfg.essential ? essRow : optRow).appendChild(group);
+  });
+}
+
+// Toggles the has-value class so selected dropdowns are visually highlighted
+function grvMarkSelect(sel) {
+  sel.classList.toggle('has-value', sel.value !== '');
+}
+
+// Collects the phrase from every non-empty dropdown
+function grvGetDropdownPhrases() {
+  return GRV_ATTR_CONFIG
+    .map(cfg => {
+      const sel = document.getElementById('grv-sel-' + cfg.key);
+      return sel ? sel.value : '';
+    })
+    .filter(Boolean);
+}
+
 // ─── GRV SEARCH ──────────────────────────────────────────────────────────────
 let grvSearchTimer = null;
 
@@ -4628,8 +4845,12 @@ function grvOnInput() {
 
 function grvClear() {
   document.getElementById('grv-input').value = '';
+  GRV_ATTR_CONFIG.forEach(cfg => {
+    const sel = document.getElementById('grv-sel-' + cfg.key);
+    if (sel) { sel.value = ''; sel.classList.remove('has-value'); }
+  });
   document.getElementById('grv-results').innerHTML = '';
-  document.getElementById('grv-hint').textContent = 'Type any part of a description — abbreviations like MBA13, M4P, 14cC, 48G, UK work too';
+  document.getElementById('grv-hint').textContent = '';
   document.getElementById('grv-input').focus();
 }
 
@@ -4930,13 +5151,17 @@ function grvRenderCard(r, labelText, labelClass, phrases, missingList) {
 }
 
 function grvRender() {
-  const raw = document.getElementById('grv-input').value.trim();
-  const resultsEl = document.getElementById('grv-results');
-  const hintEl = document.getElementById('grv-hint');
+  const raw        = document.getElementById('grv-input').value.trim();
+  const resultsEl  = document.getElementById('grv-results');
+  const hintEl     = document.getElementById('grv-hint');
 
-  if (!raw) {
+  const dropdownPhrases = grvGetDropdownPhrases();
+  const hasInput        = raw.length > 0 || dropdownPhrases.length > 0;
+
+  // Nothing entered yet — show idle state
+  if (!hasInput) {
     resultsEl.innerHTML = '';
-    hintEl.textContent = 'Type any part of a description — abbreviations like MBA13, M4P, 14cC, 48G, UK work too';
+    hintEl.textContent  = '';
     return;
   }
 
@@ -4946,7 +5171,10 @@ function grvRender() {
     return;
   }
 
-  const phrases = grvTokenize(raw);
+  // Merge dropdown phrases (exact, no tokenisation needed) with text phrases
+  const textPhrases = raw ? grvTokenize(raw) : [];
+  const phrases     = [...new Set([...dropdownPhrases, ...textPhrases])];
+
   if (!phrases.length) {
     resultsEl.innerHTML = '<div class="grv-no-results">Enter more characters to search</div>';
     return;
@@ -5032,6 +5260,9 @@ function grvRender() {
 
   resultsEl.innerHTML = html;
 }
+
+// Initialise dropdowns as soon as scripts run (DOM is ready at this point)
+grvInitDropdowns();
 
 // ─── PARSED VIEW (COMPUTER CATEGORY) ─────────────────────────────────────────
 let psParsedMode = false;
