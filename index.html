@@ -4653,14 +4653,35 @@ const GRV_EXPAND = {
   'intl':'international english kb','int':'international english kb',
   'euplug':'eu plug','ukplug':'uk plug','usplug':'us/ca plug','auplug':'au plug',
   'eu':'eu plug','au':'au plug',
-  '8g':'8gb ram','16g':'16gb ram','24g':'24gb ram','32g':'32gb ram','36g':'36gb ram','48g':'48gb ram','64g':'64gb ram',
-  '256g':'256gb ssd','512g':'512gb ssd','1t':'1tb ssd','2t':'2tb ssd',
+  // RAM/SSD — short form (16g) AND full form with suffix (16gb) both expand
+  '8g':'8gb ram','16g':'16gb ram','24g':'24gb ram','32g':'32gb ram','36g':'36gb ram','48g':'48gb ram','64g':'64gb ram','96g':'96gb ram',
+  '8gb':'8gb ram','16gb':'16gb ram','24gb':'24gb ram','32gb':'32gb ram','36gb':'36gb ram','48gb':'48gb ram','64gb':'64gb ram','96gb':'96gb ram',
+  '128gb':'128gb ram',
+  '256g':'256gb ssd','512g':'512gb ssd','1t':'1tb ssd','2t':'2tb ssd','4t':'4tb ssd',
+  '256gb':'256gb ssd','512gb':'512gb ssd','1tb':'1tb ssd','2tb':'2tb ssd','4tb':'4tb ssd',
+  // Apple silicon
   'm1pro':'m1 pro','m2pro':'m2 pro','m3pro':'m3 pro','m4pro':'m4 pro',
   'm1max':'m1 max','m2max':'m2 max','m3max':'m3 max','m4max':'m4 max',
   'm4p':'m4 pro','m3p':'m3 pro','m2p':'m2 pro','m1p':'m1 pro',
+  // Intel Core Ultra processor series
+  'u5':'core ultra 5','u7':'core ultra 7','u9':'core ultra 9',
+  'coreu5':'core ultra 5','coreu7':'core ultra 7','coreu9':'core ultra 9',
+  // Lenovo / ThinkPad shorthands
+  'tp':'thinkpad','tpx1':'thinkpad x1','x1c':'x1 carbon','x1e':'x1 extreme',
+  'x1carbon':'x1 carbon','t14':'thinkpad t14','t16':'thinkpad t16',
+  'l14':'thinkpad l14','l15':'thinkpad l15',
+  // Dell shorthands
+  'xps13':'xps 13','xps15':'xps 15','xps17':'xps 17',
+  'lat14':'latitude 14','lat15':'latitude 15',
+  // HP shorthands
+  'elite':'elitebook','elitebk':'elitebook','probook':'probook',
+  // Colors / appearance
   'mid':'midnight','slv':'silver','slvr':'silver','sky':'sky blue','stg':'starlight',
   'spblk':'space black','spgry':'space gray','spgrey':'space grey',
+  // OS
   'wn11':'windows 11','wn11pro':'windows 11 pro','wn10':'windows 10',
+  'win11':'windows 11','win11pro':'windows 11 pro','win10':'windows 10',
+  // Security
   'fp':'fingerprint reader','fpr':'fingerprint reader',
 };
 
@@ -4743,8 +4764,15 @@ function grvScore(desc, phrases) {
   // value appears in the desc but the query didn't ask for it, penalize.
   let mismatches = 0;
   for (const group of GRV_EXCLUSIVE_GROUPS) {
-    // Find which group members the QUERY contains
-    const queryHas = group.filter(g => phrases.some(ph => ph === g || ph.includes(g) || g.includes(ph)));
+    // Find which group members the QUERY contains.
+    // For the g.includes(ph) direction we require ph to be a multi-word phrase
+    // OR ≥5 chars, so short ambiguous tokens like "us" (from "us english") don't
+    // accidentally fire the plug group and penalise non-US-plug items.
+    const queryHas = group.filter(g => phrases.some(ph =>
+      ph === g ||
+      ph.includes(g) ||
+      (g.includes(ph) && (ph.includes(' ') || ph.length >= 5))
+    ));
     if (queryHas.length === 0) continue; // query didn't specify this dimension
 
     // Find which group members the DESC contains
@@ -4781,6 +4809,126 @@ function grvCopyText(text, btn) {
   copyToClipboard(text, btn);
 }
 
+// ─── ESSENTIAL ATTRIBUTE DETECTION ───────────────────────────────────────────
+// Inspects the expanded phrase list for the 4 attributes that must all match
+// for a result to be considered a "primary" match: model, processor, RAM, SSD.
+// Returns an object where each key is null (not specified in query) or
+// { phrase, label } (detected — phrase is what we look for in descriptions).
+
+function grvDetectEssentials(phrases) {
+  const ess = { model: null, processor: null, ram: null, ssd: null };
+
+  // MODEL — check most specific phrases first so "x1 carbon" beats plain "thinkpad"
+  const modelTests = [
+    // Apple
+    { phrase: 'macbook air 13', label: 'MacBook Air 13"' },
+    { phrase: 'macbook air 15', label: 'MacBook Air 15"' },
+    { phrase: 'macbook pro 14', label: 'MacBook Pro 14"' },
+    { phrase: 'macbook pro 16', label: 'MacBook Pro 16"' },
+    { phrase: 'macbook air',    label: 'MacBook Air' },
+    { phrase: 'macbook pro',    label: 'MacBook Pro' },
+    // Lenovo — specific sub-models first
+    { phrase: 'x1 carbon',     label: 'ThinkPad X1 Carbon' },
+    { phrase: 'x1 extreme',    label: 'ThinkPad X1 Extreme' },
+    { phrase: 'thinkpad t14',  label: 'ThinkPad T14' },
+    { phrase: 'thinkpad t16',  label: 'ThinkPad T16' },
+    { phrase: 'thinkpad l14',  label: 'ThinkPad L14' },
+    { phrase: 'thinkpad l15',  label: 'ThinkPad L15' },
+    { phrase: 'thinkpad',      label: 'ThinkPad' },
+    // Dell
+    { phrase: 'xps 13',        label: 'Dell XPS 13' },
+    { phrase: 'xps 15',        label: 'Dell XPS 15' },
+    { phrase: 'xps 17',        label: 'Dell XPS 17' },
+    { phrase: 'latitude 14',   label: 'Latitude 14' },
+    { phrase: 'latitude 15',   label: 'Latitude 15' },
+    { phrase: 'latitude',      label: 'Latitude' },
+    { phrase: 'xps',           label: 'Dell XPS' },
+    // HP
+    { phrase: 'elitebook',     label: 'EliteBook' },
+    { phrase: 'probook',       label: 'ProBook' },
+    // Microsoft
+    { phrase: 'surface pro',   label: 'Surface Pro' },
+    { phrase: 'surface laptop',label: 'Surface Laptop' },
+  ];
+  for (const t of modelTests) {
+    if (phrases.includes(t.phrase)) { ess.model = t; break; }
+  }
+
+  // PROCESSOR — ordered most-specific first
+  const procTests = [
+    // Apple Silicon with tier
+    { re: /^m[1-4] (pro|max|ultra)$/, fn: ph => ({ phrase: ph, label: ph.replace(/^m/, 'M').replace(/ (pro|max|ultra)$/, s => s.charAt(1).toUpperCase() + s.slice(2)) }) },
+    // Apple Silicon base
+    { re: /^m[1-4]$/, fn: ph => ({ phrase: ph, label: ph.toUpperCase() }) },
+    // Intel Core Ultra (expanded form)
+    { re: /^core ultra [579]$/, fn: ph => ({ phrase: ph, label: 'Intel ' + ph.replace(/^c/, 'C') }) },
+    // Intel Core Ultra (pair form typed by user, e.g. "ultra 7")
+    { re: /^ultra [579]$/, fn: ph => ({ phrase: ph, label: 'Intel Core ' + ph.charAt(0).toUpperCase() + ph.slice(1) }) },
+    // Intel processor model number e.g. 155H, 165H, 125U
+    { re: /^\d{3}[hupex]$/, fn: ph => ({ phrase: ph, label: 'Intel ' + ph.toUpperCase() }) },
+    // Intel Core i-series
+    { re: /^core i[3579]$/, fn: ph => ({ phrase: ph, label: ph.replace('core ', 'Core ').replace('i', 'Core i') }) },
+    { re: /^i[3579]$/, fn: ph => ({ phrase: ph, label: 'Intel ' + ph.toUpperCase() }) },
+    // AMD
+    { re: /^ryzen [3579]$/, fn: ph => ({ phrase: ph, label: 'AMD ' + ph.charAt(0).toUpperCase() + ph.slice(1) }) },
+  ];
+  for (const ph of phrases) {
+    if (ess.processor) break;
+    for (const t of procTests) {
+      if (t.re.test(ph)) { ess.processor = t.fn(ph); break; }
+    }
+  }
+
+  // RAM — looks for "NNgb ram" (produced by the expand map)
+  for (const ph of phrases) {
+    if (/^\d+gb ram$/.test(ph)) { ess.ram = { phrase: ph, label: ph.replace('gb ram', 'GB RAM').toUpperCase() }; break; }
+  }
+
+  // SSD — looks for "NNgb ssd" or "NNtb ssd"
+  for (const ph of phrases) {
+    if (/^\d+(gb|tb) ssd$/.test(ph)) { ess.ssd = { phrase: ph, label: ph.replace(/(gb|tb) ssd/, s => s.toUpperCase()) }; break; }
+  }
+
+  return ess;
+}
+
+// Returns an array of human-readable labels for any essential that is NOT
+// satisfied by the given description string.  Empty array = full match.
+function grvCheckEssentials(descRaw, essentials) {
+  const d = descRaw.toLowerCase();
+  const KEY_LABELS = { model: 'Model', processor: 'Processor', ram: 'RAM', ssd: 'SSD' };
+  return Object.entries(essentials)
+    .filter(([, v]) => v && !d.includes(v.phrase))
+    .map(([k, v]) => `${KEY_LABELS[k]}: ${v.label}`);
+}
+
+// Renders a single result card. missingList is the array from grvCheckEssentials.
+function grvRenderCard(r, labelText, labelClass, phrases, missingList) {
+  const mismatchNote = r.mismatches > 0
+    ? `<span class="grv-match-score" style="color:var(--red);border-color:rgba(179,65,65,0.3);background:rgba(179,65,65,0.07)">⚠ ${r.mismatches} attribute mismatch</span>`
+    : '';
+  const missingBadge = missingList.length > 0
+    ? `<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(179,65,65,0.07);border:1px solid rgba(179,65,65,0.28);color:var(--red);font-family:var(--mono)">⚠ No match: ${escHtml(missingList.join(' · '))}</span>`
+    : '';
+  const cardStyle = missingList.length > 0 ? ' style="opacity:0.78"' : '';
+  return `<div class="grv-match-card${labelClass === 'exact' ? ' exact' : ''}"${cardStyle}>
+    <div class="grv-match-label ${labelClass}">${labelText}</div>
+    <div class="grv-match-code">${escHtml(r.sku_id)}</div>
+    <div class="grv-match-desc">${grvHighlight(r.desc, phrases)}</div>
+    <div class="grv-match-meta">
+      <span class="ps-exact-cat">${escHtml(r.cat || '—')}</span>
+      ${r.mpn ? `<span class="grv-match-score">MPN: ${escHtml(r.mpn)}</span>` : ''}
+      ${mismatchNote}
+      ${missingBadge}
+    </div>
+    <div class="grv-match-actions">
+      <button class="grv-copy-btn" data-grv-copy="${escHtml(r.sku_id)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy Item Code</button>
+      <button class="grv-copy-btn" data-grv-copy="${escHtml(r.sku_id + '\n' + r.desc)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy Code + Desc</button>
+      ${r.mpn ? `<button class="grv-copy-btn" data-grv-copy="${escHtml(r.mpn)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy MPN</button>` : ''}
+    </div>
+  </div>`;
+}
+
 function grvRender() {
   const raw = document.getElementById('grv-input').value.trim();
   const resultsEl = document.getElementById('grv-results');
@@ -4814,11 +4962,8 @@ function grvRender() {
 
   const top = scored.slice(0, 8);
 
-  // "Best match" = top result with no attribute mismatches
-  const best = top.length > 0 && top[0].mismatches === 0 ? top[0] : null;
-
   hintEl.textContent = scored.length === 0
-    ? `No matches found — try simplifying the query`
+    ? 'No matches found — try simplifying the query'
     : `${scored.length} candidate${scored.length !== 1 ? 's' : ''} — showing top ${top.length}`;
 
   if (top.length === 0) {
@@ -4826,28 +4971,66 @@ function grvRender() {
     return;
   }
 
-  resultsEl.innerHTML = top.map((r, i) => {
-    const isBest = best && i === 0;
-    const pct = Math.max(0, Math.round((r.score / (phrases.reduce((s,p)=>s+p.length*2,0)+15)) * 100));
-    const mismatchNote = r.mismatches > 0
-      ? `<span class="grv-match-score" style="color:var(--red);border-color:rgba(179,65,65,0.3);background:rgba(179,65,65,0.07)">⚠ ${r.mismatches} attribute mismatch</span>`
-      : '';
-    return `<div class="grv-match-card${isBest ? ' exact' : ''}">
-      <div class="grv-match-label ${isBest ? 'exact' : 'fuzzy'}">${isBest ? '⚡ Best Match' : `Match ${i + 1}`}</div>
-      <div class="grv-match-code">${escHtml(r.sku_id)}</div>
-      <div class="grv-match-desc">${grvHighlight(r.desc, phrases)}</div>
-      <div class="grv-match-meta">
-        <span class="ps-exact-cat">${escHtml(r.cat || '—')}</span>
-        ${r.mpn ? `<span class="grv-match-score">MPN: ${escHtml(r.mpn)}</span>` : ''}
-        ${mismatchNote}
-      </div>
-      <div class="grv-match-actions">
-        <button class="grv-copy-btn" data-grv-copy="${escHtml(r.sku_id)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy Item Code</button>
-        <button class="grv-copy-btn" data-grv-copy="${escHtml(r.sku_id + '\n' + r.desc)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy Code + Desc</button>
-        ${r.mpn ? `<button class="grv-copy-btn" data-grv-copy="${escHtml(r.mpn)}" onclick="grvCopyText(this.dataset.grvCopy, this)">⎘ Copy MPN</button>` : ''}
-      </div>
+  // ── Essential-attribute matching ──────────────────────────────────────────
+  const essentials  = grvDetectEssentials(phrases);
+  const hasEssentials = Object.values(essentials).some(Boolean);
+
+  // Attach missing-essential list to every result up front
+  top.forEach(r => {
+    r._missing = hasEssentials ? grvCheckEssentials(r.desc + ' ' + r.mpn, essentials) : [];
+  });
+
+  const primary   = top.filter(r => r._missing.length === 0);
+  const secondary = top.filter(r => r._missing.length > 0);
+
+  // "Best match" = top primary result with no exclusive-group mismatches
+  const best = primary.length > 0 && primary[0].mismatches === 0 ? primary[0] : null;
+
+  // Warning note: built when essentials were detected but no primary match exists.
+  // Shows only which attributes appear in NONE of the top results (the real gap).
+  let noteHtml = '';
+  if (hasEssentials && primary.length === 0) {
+    const KEY_LABELS = { model: 'Model', processor: 'Processor', ram: 'RAM', ssd: 'SSD' };
+    const gaps = Object.entries(essentials)
+      .filter(([, v]) => v && !top.some(r => (r.desc + ' ' + r.mpn).toLowerCase().includes(v.phrase)))
+      .map(([k, v]) => `<strong>${KEY_LABELS[k]}</strong>: ${escHtml(v.label)}`);
+    const detected = Object.entries(essentials)
+      .filter(([, v]) => v)
+      .map(([k, v]) => `<strong>${KEY_LABELS[k]}</strong>: ${escHtml(v.label)}`);
+    const parts = gaps.length > 0 ? gaps : detected;
+    noteHtml = `<div style="background:rgba(179,65,65,0.07);border:1px solid rgba(179,65,65,0.3);border-radius:8px;padding:11px 16px;margin-bottom:16px;font-size:12.5px;color:var(--red);line-height:1.6">
+      ⚠ No catalog items matched all required attributes — ${parts.join(' · ')}
     </div>`;
-  }).join('');
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  let html = noteHtml;
+
+  // Primary matches
+  primary.forEach((r, i) => {
+    const isBest = best && i === 0;
+    html += grvRenderCard(r,
+      isBest ? '⚡ Best Match' : `Match ${i + 1}`,
+      isBest ? 'exact' : 'fuzzy',
+      phrases, []
+    );
+  });
+
+  // Secondary matches, with a divider
+  if (secondary.length > 0) {
+    if (primary.length > 0) {
+      html += `<div style="margin:18px 0 14px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);white-space:nowrap">Secondary matches — partial attribute fit</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>`;
+    }
+    secondary.forEach((r, i) => {
+      html += grvRenderCard(r, `Secondary ${i + 1}`, 'fuzzy', phrases, r._missing);
+    });
+  }
+
+  resultsEl.innerHTML = html;
 }
 
 // ─── PARSED VIEW (COMPUTER CATEGORY) ─────────────────────────────────────────
