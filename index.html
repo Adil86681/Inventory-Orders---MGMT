@@ -3824,7 +3824,7 @@ async function invFetchFromAPI() {
           query: invGqlQuery,
           variables: {
             paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] },
-            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'ARRIVED_AT_PROCESSING_FACILITY', 'PARTIALLY_RECEIVED'], firstbaseSupplied: true }
+            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'PARTIALLY_RECEIVED'], firstbaseSupplied: true }
           }
         })
       });
