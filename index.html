@@ -3824,7 +3824,7 @@ async function invFetchFromAPI() {
           query: invGqlQuery,
           variables: {
             paging: { pageNumber, pageSize, sort: [{ field: 'createdAt', direction: 'DESC' }] },
-            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'PARTIALLY_RECEIVED'], firstbaseSupplied: true }
+            filter: { statuses: ['ORDERED', 'PROCESSING', 'SHIPPED', 'OUT_FOR_DELIVERY', 'ARRIVED_AT_PROCESSING_FACILITY', 'PARTIALLY_RECEIVED'], firstbaseSupplied: true }
           }
         })
       });
@@ -4013,7 +4013,7 @@ async function invFetchFromAPI() {
 }
 
 function invDeriveGroupStatus(statuses) {
-  const priority = ['PARTIALLY_RECEIVED','OUT_FOR_DELIVERY','ARRIVED_AT_PROCESSING_FACILITY','SHIPPED','PARTIALLY_SHIPPED','ORDERED','PENDING','CANCELLED'];
+  const priority = ['PARTIALLY_RECEIVED','ARRIVED_AT_PROCESSING_FACILITY','OUT_FOR_DELIVERY','SHIPPED','PARTIALLY_SHIPPED','ORDERED','PENDING','CANCELLED'];
   for (const s of priority) {
     if (statuses.includes(s)) return s;
   }
