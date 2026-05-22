@@ -8489,6 +8489,10 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       <h2 style="font-size:17px;font-weight:600;margin:0;color:var(--text);">📋 Weekly Shipment Summary</h2>
       <button onclick="kpiWeeklyCloseModal()" style="background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:6px;line-height:1;">✕</button>
     </div>
+    <div style="padding:10px 22px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;gap:10px;">
+      <label for="kpiWeekSelect" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);white-space:nowrap">Week</label>
+      <select id="kpiWeekSelect" onchange="kpiWeeklyOnWeekChange()" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--mono);cursor:pointer;outline:none;"></select>
+    </div>
     <div style="padding:18px 22px;overflow-y:auto;flex:1;">
       <div id="kpiWeeklySummaryContent"></div>
     </div>
@@ -8499,14 +8503,7 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
 (function () {
 
   /* ── helpers (re-use globals already defined in the dashboard) ── */
-  function prevWeekRange() {
-    var now = new Date();
-    var thisKey = kpiIsoWeekKey(now);
-    var thisRange = kpiWeekRangeFromKey(thisKey);
-    var prevMonday = new Date(thisRange.start.getTime() - 7 * 86400000);
-    var prevKey = kpiIsoWeekKey(prevMonday);
-    return kpiWeekRangeFromKey(prevKey);
-  }
+  var kpiWeeklySelectedKey = null;
 
   function fmtShort(d) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -8517,22 +8514,45 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  /* Return the ISO week key for the week immediately before the given key */
+  function prevKeyFrom(key) {
+    var range = kpiWeekRangeFromKey(key);
+    return kpiIsoWeekKey(new Date(range.start.getTime() - 86400000));
+  }
+
+  /* Key for the most recent complete week (Mon–Sun) */
+  function getDefaultWeekKey() {
+    var now = new Date();
+    var thisKey = kpiIsoWeekKey(now);
+    var thisRange = kpiWeekRangeFromKey(thisKey);
+    return kpiIsoWeekKey(new Date(thisRange.start.getTime() - 86400000));
+  }
+
+  /* Return array of n ISO week keys, most-recent first */
+  function getRecentWeekKeys(n) {
+    var keys = [];
+    var key = getDefaultWeekKey();
+    for (var i = 0; i < n; i++) {
+      keys.push(key);
+      key = prevKeyFrom(key);
+    }
+    return keys;
+  }
+
   /* ── core summary builder ── */
-  function buildKpiWeeklySummary() {
-    var range    = prevWeekRange();
+  function buildKpiWeeklySummary(weekKey) {
+    var range    = kpiWeekRangeFromKey(weekKey);
     var startISO = range.start.toISOString().slice(0, 10);
-    var endISO   = range.end.toISOString().slice(0, 10);   // Sunday (inclusive)
+    var endISO   = range.end.toISOString().slice(0, 10);
 
     var rows = typeof kpiDashRows !== 'undefined' ? kpiDashRows : [];
-    var byWh = {};   // { warehouse: { total, units, met, missed } }
+    var byWh = {};
     var grandTotal = 0;
     var grandUnits = 0;
 
     rows.forEach(function (r) {
-      // Must have both timestamps (completed order)
       if (!r.at_facility_at || !r.completed_at) return;
 
-      // Bucket by completed_at date
       var completedDate = kpiParseDate(r.completed_at);
       if (!completedDate) return;
       var completedISO = completedDate.toISOString().slice(0, 10);
@@ -8545,7 +8565,6 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       grandTotal++;
       grandUnits += (r.total_qty || 0);
 
-      // SLO: ≤ 2 business days from at_facility_at → completed_at
       var start  = kpiParseDate(r.at_facility_at);
       var end    = kpiParseDate(r.completed_at);
       if (start && end) {
@@ -8557,7 +8576,6 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       }
     });
 
-    // Sort by total descending
     var whRows = Object.keys(byWh).sort(function (a, b) {
       return byWh[b].total - byWh[a].total;
     }).map(function (wh) {
@@ -8567,22 +8585,61 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       return { wh: wh, total: d.total, units: d.units, met: d.met, missed: d.missed, sloEval: sloEval, sloPct: sloPct };
     });
 
-    // Overall SLO
     var overallMet    = whRows.reduce(function (s, r) { return s + r.met;    }, 0);
     var overallMissed = whRows.reduce(function (s, r) { return s + r.missed; }, 0);
     var overallEval   = overallMet + overallMissed;
     var overallPct    = overallEval > 0 ? (overallMet / overallEval * 100).toFixed(1) : null;
 
     return {
-      weekStart:    fmtShort(range.start),
-      weekEnd:      fmtShort(range.end),
-      grandTotal:   grandTotal,
-      grandUnits:   grandUnits,
-      whRows:       whRows,
-      overallMet:   overallMet,
-      overallMissed:overallMissed,
-      overallEval:  overallEval,
-      overallPct:   overallPct
+      weekStart:     fmtShort(range.start),
+      weekEnd:       fmtShort(range.end),
+      grandTotal:    grandTotal,
+      grandUnits:    grandUnits,
+      whRows:        whRows,
+      overallMet:    overallMet,
+      overallMissed: overallMissed,
+      overallEval:   overallEval,
+      overallPct:    overallPct
+    };
+  }
+
+  /* ── trend builder: compare current week to prior week ── */
+  function buildKpiWeeklyTrend(cur, prev) {
+    var volDelta   = cur.grandTotal - prev.grandTotal;
+    var unitsDelta = cur.grandUnits  - prev.grandUnits;
+
+    var sloDelta    = null;
+    var sloDeltaStr = '—';
+    if (cur.overallPct !== null && prev.overallPct !== null) {
+      sloDelta    = (parseFloat(cur.overallPct) - parseFloat(prev.overallPct)).toFixed(1);
+      sloDeltaStr = (parseFloat(sloDelta) >= 0 ? '+' : '') + sloDelta + 'pp';
+    } else if (cur.overallPct !== null && prev.overallPct === null) {
+      sloDeltaStr = 'N/A (no prior SLO data)';
+    }
+
+    var volSign  = volDelta >= 0 ? '+' : '';
+    var volLabel = volDelta > 0 ? 'busier week' : (volDelta < 0 ? 'quieter week' : 'same volume');
+    var volArrow = volDelta > 0 ? '▲' : (volDelta < 0 ? '▼' : '→');
+    var uSign    = unitsDelta >= 0 ? '+' : '';
+
+    var sloLabel = sloDelta === null ? '—'
+                 : (parseFloat(sloDelta) > 0 ? 'improved' : (parseFloat(sloDelta) < 0 ? 'declined' : 'unchanged'));
+    var sloArrow = sloDelta === null ? '→'
+                 : (parseFloat(sloDelta) > 0 ? '▲' : (parseFloat(sloDelta) < 0 ? '▼' : '→'));
+
+    return {
+      volDelta:      volDelta,
+      unitsDelta:    unitsDelta,
+      volSign:       volSign,
+      volLabel:      volLabel,
+      volArrow:      volArrow,
+      sloDelta:      sloDelta,
+      sloDeltaStr:   sloDeltaStr,
+      sloLabel:      sloLabel,
+      sloArrow:      sloArrow,
+      uSign:         uSign,
+      prevWeekStart: prev.weekStart,
+      prevWeekEnd:   prev.weekEnd
     };
   }
 
@@ -8594,19 +8651,26 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
     return 'var(--red)';
   }
 
-  /* ── email body builder ── */
-  function buildKpiWeeklyEmailBody(s) {
-    var div = '─'.repeat(56);
-    var header = 'Weekly Shipment Summary — ' + s.weekStart + ' – ' + s.weekEnd;
+  /* ── trend delta colour helper ── */
+  function trendColor(delta, higherIsBetter) {
+    if (delta === null) return 'var(--muted)';
+    var n = parseFloat(delta);
+    if (n === 0)  return 'var(--muted)';
+    return (n > 0) === higherIsBetter ? 'var(--green)' : 'var(--red)';
+  }
 
-    // Dynamic column width: fit the longest warehouse name (min 18)
-    var maxWhLen = s.whRows.reduce(function (m, r) { return Math.max(m, r.wh.length); }, 7); // 7 = 'Overall'
+  /* ── email body builder ── */
+  function buildKpiWeeklyEmailBody(s, trend) {
+    var div    = '\u2500'.repeat(56);
+    var header = 'Weekly Shipment Summary \u2014 ' + s.weekStart + ' \u2013 ' + s.weekEnd;
+
+    var maxWhLen = s.whRows.reduce(function (m, r) { return Math.max(m, r.wh.length); }, 7);
     maxWhLen = Math.max(maxWhLen, 18);
 
     var whLines = s.whRows.length > 0
       ? s.whRows.map(function (r) {
           var pct  = r.sloPct !== null ? r.sloPct + '%' : 'N/A';
-          var flag = r.sloPct !== null ? (parseFloat(r.sloPct) >= 90 ? '✓' : (parseFloat(r.sloPct) >= 75 ? '~' : '✗')) : '-';
+          var flag = r.sloPct !== null ? (parseFloat(r.sloPct) >= 90 ? '\u2713' : (parseFloat(r.sloPct) >= 75 ? '~' : '\u2717')) : '-';
           var recv = String(r.total).padStart(4) + ' received (' + r.units + ' units)';
           return '  ' + r.wh.padEnd(maxWhLen + 2) +
                  recv.padEnd(26) +
@@ -8616,41 +8680,57 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
 
     var overallPctStr = s.overallPct !== null ? s.overallPct + '%' : 'N/A';
     var overallFlag   = s.overallPct !== null
-      ? (parseFloat(s.overallPct) >= 90 ? '✓' : (parseFloat(s.overallPct) >= 75 ? '~' : '✗'))
+      ? (parseFloat(s.overallPct) >= 90 ? '\u2713' : (parseFloat(s.overallPct) >= 75 ? '~' : '\u2717'))
       : '-';
     var overallRecv = String(s.grandTotal).padStart(4) + ' received (' + s.grandUnits + ' units)';
+
+    var trendSection = '';
+    if (trend) {
+      var volLine = '  Volume:  ' +
+                   (trend.volSign + trend.volDelta + ' shipments (' + trend.uSign + trend.unitsDelta + ' units)').padEnd(34) +
+                   trend.volArrow + '  ' + trend.volLabel;
+      var sloLine = '  SLO:     ' +
+                   trend.sloDeltaStr.padEnd(34) +
+                   trend.sloArrow + '  ' + trend.sloLabel;
+      trendSection =
+        '\n' + div + '\n' +
+        'WEEK-OVER-WEEK TREND  (vs ' + trend.prevWeekStart + ' \u2013 ' + trend.prevWeekEnd + ')\n' +
+        div + '\n' +
+        volLine + '\n' +
+        sloLine + '\n' +
+        div;
+    }
 
     return 'Hi Team,\n\n' +
       header + '\n\n' +
       div + '\n' +
-      'SHIPMENTS RECEIVED LAST WEEK\n' +
+      'SHIPMENTS RECEIVED\n' +
       div + '\n' +
-      '  Total across all warehouses: ' + s.grandTotal + ' shipment' + (s.grandTotal !== 1 ? 's' : '') + ' · ' + s.grandUnits + ' unit' + (s.grandUnits !== 1 ? 's' : '') + '\n\n' +
+      '  Total across all warehouses: ' + s.grandTotal + ' shipment' + (s.grandTotal !== 1 ? 's' : '') + ' \u00b7 ' + s.grandUnits + ' unit' + (s.grandUnits !== 1 ? 's' : '') + '\n\n' +
       div + '\n' +
-      'SLO PERFORMANCE BY WAREHOUSE  (≤ 2 business days · at-facility → completed)\n' +
+      'SLO PERFORMANCE BY WAREHOUSE  (\u2264 2 business days \u00b7 at-facility \u2192 completed)\n' +
       div + '\n' +
       whLines + '\n' +
       div + '\n' +
       '  ' + 'Overall'.padEnd(maxWhLen + 2) +
       overallRecv.padEnd(26) +
       overallPctStr.padStart(7) + ' SLO  ' + overallFlag + '\n' +
-      div + '\n\n' +
-      '— Firstbase Ops Bot';
+      div +
+      trendSection + '\n\n' +
+      '\u2014 Firstbase Ops Bot';
   }
 
-  /* ── modal render ── */
-  window.kpiWeeklyShowModal = function () {
-    if (typeof kpiDashRows === 'undefined' || kpiDashRows.length === 0) {
-      alert('No KPI data loaded yet — click “↻ Refresh” first.');
-      return;
-    }
-
-    var s = buildKpiWeeklySummary();
-    var emailBody = buildKpiWeeklyEmailBody(s);
+  /* ── render: build & inject all modal content for a given weekKey ── */
+  function kpiWeeklyRender(weekKey) {
+    var s         = buildKpiWeeklySummary(weekKey);
+    var priorKey  = prevKeyFrom(weekKey);
+    var prior     = buildKpiWeeklySummary(priorKey);
+    var trend     = buildKpiWeeklyTrend(s, prior);
+    var emailBody = buildKpiWeeklyEmailBody(s, trend);
 
     var tableRows = s.whRows.length > 0
       ? s.whRows.map(function (r) {
-          var pctStr  = r.sloPct !== null ? r.sloPct + '%' : '—';
+          var pctStr   = r.sloPct !== null ? r.sloPct + '%' : '\u2014';
           var pctColor = sloColor(r.sloPct !== null ? parseFloat(r.sloPct) : null);
           return '<tr>' +
             '<td style="padding:9px 14px;font-size:13px;border-bottom:1px solid var(--border)">' + escHTML(r.wh) + '</td>' +
@@ -8663,16 +8743,39 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
         }).join('')
       : '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No completed shipments found for this period.</td></tr>';
 
-    var overallPctStr   = s.overallPct !== null ? s.overallPct + '%' : '—';
+    var overallPctStr   = s.overallPct !== null ? s.overallPct + '%' : '\u2014';
     var overallPctColor = sloColor(s.overallPct !== null ? parseFloat(s.overallPct) : null);
-    var thStyle = 'padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;';
+    var thStyle  = 'padding:9px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;';
     var thStyleL = thStyle.replace('text-align:right', 'text-align:left');
 
-    document.getElementById('kpiWeeklySummaryContent').innerHTML =
-      '<div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">Previous week</div>' +
-      '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">' + escHTML(s.weekStart) + ' – ' + escHTML(s.weekEnd) + '</div>' +
+    /* Trend callout box */
+    var volDeltaColor = trendColor(trend.volDelta, false);  /* volume: neutral — grey if same, amber if busier */
+    var sloDeltaColor = trendColor(trend.sloDelta !== null ? parseFloat(trend.sloDelta) : null, true);
+    var volText = trend.volSign + trend.volDelta + ' shipment' + (Math.abs(trend.volDelta) !== 1 ? 's' : '') +
+                  ' (' + trend.uSign + trend.unitsDelta + ' units)';
+    var trendHtml =
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:20px">' +
+        '<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">' +
+          'vs prior week (' + escHTML(trend.prevWeekStart) + ' \u2013 ' + escHTML(trend.prevWeekEnd) + ')' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+          '<div style="flex:1;min-width:160px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">' +
+            '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">\uD83D\uDCE6 Volume</div>' +
+            '<div style="font-size:14px;font-weight:700;font-family:var(--mono);color:' + volDeltaColor + '">' + escHTML(volText) + '</div>' +
+            '<div style="font-size:11px;color:var(--muted);margin-top:3px">' + escHTML(trend.volArrow + ' ' + trend.volLabel) + '</div>' +
+          '</div>' +
+          '<div style="flex:1;min-width:160px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px">' +
+            '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">\uD83D\uDCCA SLO</div>' +
+            '<div style="font-size:14px;font-weight:700;font-family:var(--mono);color:' + sloDeltaColor + '">' + escHTML(trend.sloDeltaStr) + '</div>' +
+            '<div style="font-size:11px;color:var(--muted);margin-top:3px">' + escHTML(trend.sloArrow + ' ' + trend.sloLabel) + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
 
-      // Total received callout
+    document.getElementById('kpiWeeklySummaryContent').innerHTML =
+      '<div style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-bottom:4px">Selected week</div>' +
+      '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">' + escHTML(s.weekStart) + ' \u2013 ' + escHTML(s.weekEnd) + '</div>' +
+
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">' +
         '<span style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--accent2)">' + s.grandTotal + '</span>' +
         '<span style="font-size:14px;color:var(--text2)">shipments received</span>' +
@@ -8680,7 +8783,6 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
         '<span style="font-size:12px;color:var(--muted);margin-left:4px">across all warehouses</span>' +
       '</div>' +
 
-      // Per-warehouse table
       '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">SLO by warehouse <span style="font-weight:400;text-transform:none;letter-spacing:0">&mdash; &le;2 business days, at-facility &rarr; completed</span></div>' +
       '<table style="width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:20px">' +
         '<thead><tr style="background:var(--surface2)">' +
@@ -8702,15 +8804,40 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
         '</tr></tfoot>' +
       '</table>' +
 
-      // Email body
+      trendHtml +
+
       '<div style="margin-bottom:8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Email body</div>' +
       '<textarea id="kpiWeeklyEmailBody" readonly style="width:100%;min-height:200px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--text);resize:vertical;outline:none">' + emailBody + '</textarea>' +
       '<div style="display:flex;gap:10px;margin-top:12px">' +
-        '<button onclick="kpiWeeklyCopyEmail(this)" class="btn btn-primary" style="flex:1">⎘ Copy Email Body</button>' +
+        '<button onclick="kpiWeeklyCopyEmail(this)" class="btn btn-primary" style="flex:1">\u2398 Copy Email Body</button>' +
         '<button onclick="kpiWeeklyCloseModal()" class="btn" style="border:1px solid var(--border);background:var(--surface2);color:var(--text2)">Close</button>' +
       '</div>';
+  }
 
+  /* ── modal open ── */
+  window.kpiWeeklyShowModal = function () {
+    if (typeof kpiDashRows === 'undefined' || kpiDashRows.length === 0) {
+      alert('No KPI data loaded yet \u2014 click "\u21bb Refresh" first.');
+      return;
+    }
+
+    var sel   = document.getElementById('kpiWeekSelect');
+    var weeks = getRecentWeekKeys(12);
+    sel.innerHTML = weeks.map(function (key, i) {
+      var range = kpiWeekRangeFromKey(key);
+      var label = fmtShort(range.start) + ' \u2013 ' + fmtShort(range.end);
+      return '<option value="' + key + '"' + (i === 0 ? ' selected' : '') + '>' + label + '</option>';
+    }).join('');
+
+    kpiWeeklySelectedKey = weeks[0];
+    kpiWeeklyRender(kpiWeeklySelectedKey);
     document.getElementById('kpiWeeklySummaryModal').classList.add('show');
+  };
+
+  window.kpiWeeklyOnWeekChange = function () {
+    var sel = document.getElementById('kpiWeekSelect');
+    kpiWeeklySelectedKey = sel.value;
+    kpiWeeklyRender(kpiWeeklySelectedKey);
   };
 
   window.kpiWeeklyCloseModal = function () {
@@ -8721,7 +8848,7 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
     var ta = document.getElementById('kpiWeeklyEmailBody');
     navigator.clipboard.writeText(ta.value).then(function () {
       var orig = btn.innerHTML;
-      btn.innerHTML = '✓ Copied!';
+      btn.innerHTML = '\u2713 Copied!';
       btn.style.background = 'var(--green)';
       btn.style.borderColor = 'var(--green-dim)';
       setTimeout(function () {
