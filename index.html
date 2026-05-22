@@ -8528,10 +8528,10 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
     return kpiIsoWeekKey(new Date(thisRange.start.getTime() - 86400000));
   }
 
-  /* Return array of n ISO week keys, most-recent first */
+  /* Return array of n ISO week keys, most-recent first (includes current week) */
   function getRecentWeekKeys(n) {
     var keys = [];
-    var key = getDefaultWeekKey();
+    var key = kpiIsoWeekKey(new Date());  // start from current week
     for (var i = 0; i < n; i++) {
       keys.push(key);
       key = prevKeyFrom(key);
@@ -8821,15 +8821,18 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       return;
     }
 
-    var sel   = document.getElementById('kpiWeekSelect');
-    var weeks = getRecentWeekKeys(12);
+    var sel        = document.getElementById('kpiWeekSelect');
+    var weeks      = getRecentWeekKeys(13);
+    var currentKey = kpiIsoWeekKey(new Date());
     sel.innerHTML = weeks.map(function (key, i) {
       var range = kpiWeekRangeFromKey(key);
-      var label = fmtShort(range.start) + ' \u2013 ' + fmtShort(range.end);
-      return '<option value="' + key + '"' + (i === 0 ? ' selected' : '') + '>' + label + '</option>';
+      var label = fmtShort(range.start) + ' – ' + fmtShort(range.end);
+      if (key === currentKey) label += ' (current)';
+      var selected = (i === 1);  // default to previous complete week
+      return '<option value="' + key + '"' + (selected ? ' selected' : '') + '>' + label + '</option>';
     }).join('');
 
-    kpiWeeklySelectedKey = weeks[0];
+    kpiWeeklySelectedKey = weeks[1];
     kpiWeeklyRender(kpiWeeklySelectedKey);
     document.getElementById('kpiWeeklySummaryModal').classList.add('show');
   };
