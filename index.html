@@ -4310,9 +4310,9 @@ function invRenderTable() {
 
       let tracking = '—';
       if (it.tracking_url) {
-        tracking = `<a class="tracking-link" href="${it.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${it.tracking_code || 'Track'}</a>${kdBtn(it.tracking_code)}`;
+        tracking = `<a class="tracking-link" href="${it.tracking_url}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle">${it.tracking_code || 'Track'}</a>${kdBtn(it.tracking_code, it.carrier, it.tracking_url)}`;
       } else if (it.tracking_code) {
-        tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code}</span>${kdBtn(it.tracking_code)}`;
+        tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tracking_code}</span>${kdBtn(it.tracking_code, it.carrier, it.tracking_url)}`;
       }
 
       const productCell = `<span class="sku-tooltip-wrap">${it.product_title || '—'}<span class="sku-tip">SKU: ${it.sku_id || '—'}</span></span>`;
@@ -4667,8 +4667,8 @@ function csRenderTable() {
     let tracking = '—';
     const trackedPkg = (o.packages||[]).find(p => p.trackingUrl || p.trackingCode);
     if (trackedPkg) {
-      if (trackedPkg.trackingUrl) tracking = `<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>${kdBtn(trackedPkg.trackingCode)}`;
-      else tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>${kdBtn(trackedPkg.trackingCode)}`;
+      if (trackedPkg.trackingUrl) tracking = `<a class="tracking-link" href="${trackedPkg.trackingUrl}" target="_blank" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${trackedPkg.trackingCode||''}">${trackedPkg.trackingCode||'Track'}</a>${kdBtn(trackedPkg.trackingCode, trackedPkg.shippingCarrier, trackedPkg.trackingUrl)}`;
+      else tracking = `<span class="mono" style="max-width:120px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${trackedPkg.trackingCode}">${trackedPkg.trackingCode}</span>${kdBtn(trackedPkg.trackingCode, trackedPkg.shippingCarrier, trackedPkg.trackingUrl)}`;
     }
 
     // Fall back to a synthetic single-item if items array is empty
@@ -7338,10 +7338,12 @@ function copyToClipboard(text, btn, labelDone, labelOrig) {
 // ─── KEYDELIVERY HELPERS (defined early so render functions can call kdBtn) ──
 // Credentials live in the Vercel serverless function (api/track.js) — not here.
 
-function kdBtn(code) {
+function kdBtn(code, carrier, trackingUrl) {
   if (!code) return '';
   const safe = code.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  return '<button class="btn-kd-track" onclick="event.stopPropagation();kdTrack(\'' + safe + '\',this)" title="Live track">&#128205;</button>';
+  const safeC = (carrier || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const safeU = (trackingUrl || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return '<button class="btn-kd-track" onclick="event.stopPropagation();kdTrack(\'' + safe + '\',\'' + safeC + '\',\'' + safeU + '\',this)" title="Live track">&#128205;</button>';
 }
 
 async function _kdPost(action, params) {
@@ -7372,7 +7374,26 @@ function kdClose() {
   if (el) el.classList.remove('open');
 }
 
-async function kdTrack(trackingCode, btnEl) {
+// Carrier name → KeyDelivery carrier_id mapping (common Firstbase shipping partners)
+const _KD_CARRIER_MAP = {
+  'dhl': 'dhl', 'dhl express': 'dhl_express', 'dhl ecommerce': 'dhl_ecommerce',
+  'ups': 'ups', 'fedex': 'fedex', 'tnt': 'tnt',
+  'dpd': 'dpd', 'dpd uk': 'dpd_uk', 'gls': 'gls',
+  'postnl': 'postnl', 'royal mail': 'royal_mail', 'royalmail': 'royal_mail',
+  'bpost': 'bpost', 'hermes': 'hermes', 'evri': 'hermes',
+  'db schenker': 'db_schenker', 'schenker': 'db_schenker',
+  'geodis': 'geodis', 'ceva': 'ceva', 'kuehne nagel': 'kuehne_nagel',
+  'chronopost': 'chronopost', 'colissimo': 'colissimo',
+  'correos': 'correos', 'seur': 'seur', 'mrw': 'mrw', 'nacex': 'nacex',
+  'brt': 'brt', 'sda': 'sda', 'amazon logistics': 'amazon', 'amazon': 'amazon',
+  'usps': 'usps', 'canada post': 'canada_post',
+};
+function _kdCarrierId(name) {
+  if (!name) return null;
+  return _KD_CARRIER_MAP[name.toLowerCase().trim()] || null;
+}
+
+async function kdTrack(trackingCode, carrierHint, trackingUrl, btnEl) {
   if (!trackingCode) return;
   const overlay = document.getElementById('kd-overlay');
   const body    = document.getElementById('kd-modal-body');
@@ -7383,10 +7404,28 @@ async function kdTrack(trackingCode, btnEl) {
   overlay.classList.add('open');
   if (btnEl) { btnEl.classList.add('loading'); btnEl.textContent = '…'; }
   try {
-    const det = await _kdPost('detect', { tracking_number: trackingCode });
-    if (!det.data || !det.data.length) throw new Error('Carrier not detected');
-    const { carrier_id, carrier_name } = det.data[0];
-    body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Fetching from ' + carrier_name + '…</div>';
+    let carrier_id   = _kdCarrierId(carrierHint);
+    let carrier_name = carrierHint || '';
+    if (!carrier_id) {
+      const det = await _kdPost('detect', { tracking_number: trackingCode });
+      if (!det.data || !det.data.length) {
+        if (trackingUrl) {
+          body.innerHTML =
+            '<div class="kd-error" style="text-align:left">⚠️ Carrier not auto-detected' +
+            (carrierHint ? ' (' + carrierHint + ')' : '') + '.<br><br>' +
+            '<a href="' + trackingUrl + '" target="_blank" style="display:inline-flex;align-items:center;gap:6px;' +
+            'padding:8px 14px;border-radius:7px;background:rgba(61,111,255,0.1);border:1px solid rgba(61,111,255,0.3);' +
+            'color:var(--accent2);text-decoration:none;font-weight:600;font-size:13px">🔗 Open carrier tracking page</a></div>';
+        } else {
+          throw new Error('Carrier not detected' + (carrierHint ? ' (' + carrierHint + ')' : ''));
+        }
+        if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
+        return;
+      }
+      carrier_id   = det.data[0].carrier_id;
+      carrier_name = det.data[0].carrier_name;
+    }
+    body.innerHTML = '<div class="kd-spinner"><div class="kd-spin"></div>Fetching from ' + (carrier_name || carrier_id) + '…</div>';
     const res = await _kdPost('track', { carrier_id, tracking_number: trackingCode, area_show:1, order:'desc' });
     if (res.code !== 200 || !res.data) throw new Error(res.message || 'Error ' + res.code);
     const d = res.data;
@@ -7404,16 +7443,21 @@ async function kdTrack(trackingCode, btnEl) {
     ).join('');
     body.innerHTML =
       '<div class="kd-status-row"><span class="kd-badge ' + st.cls + '">' + st.label + '</span>' +
-      '<span class="kd-carrier">' + carrier_name + '</span></div>' +
+      '<span class="kd-carrier">' + (carrier_name || carrier_id) + '</span></div>' +
       '<div class="kd-latest-msg">' + msg + '</div>' +
       '<div class="kd-meta">' + (loc ? '<span>' + loc + '</span>' : '') + (upd ? '<span>' + upd + '</span>' : '') + '</div>' +
       (items.length ? '<div class="kd-events-label">Tracking History (' + items.length + ' events)</div>' + evHtml : '');
     if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
   } catch(e) {
     const isCors = e.name === 'TypeError';
-    body.innerHTML = '<div class="kd-error">' +
+    const fallbackLink = trackingUrl
+      ? '<br><br><a href="' + trackingUrl + '" target="_blank" style="display:inline-flex;align-items:center;gap:6px;' +
+        'padding:8px 14px;border-radius:7px;background:rgba(61,111,255,0.1);border:1px solid rgba(61,111,255,0.3);' +
+        'color:var(--accent2);text-decoration:none;font-weight:600;font-size:13px">🔗 Open carrier tracking page</a>'
+      : '';
+    body.innerHTML = '<div class="kd-error" style="text-align:left">' +
       (isCors ? '⚠️ Browser blocked the request (CORS). A server-side proxy is needed.'
-              : '⚠️ ' + e.message) + '</div>';
+              : '⚠️ ' + e.message) + fallbackLink + '</div>';
     if (btnEl) { btnEl.classList.remove('loading'); btnEl.textContent = '📍'; }
   }
 }
