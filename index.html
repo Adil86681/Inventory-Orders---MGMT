@@ -2099,6 +2099,16 @@ function kpiSaveSnapshot(snap) {
   try { localStorage.setItem(KPI_SNAPSHOT_KEY, JSON.stringify(snap)); } catch(e) {}
 }
 
+// ─── CS-order KPI snapshot (separate key so IDs never collide with inventory) ─
+const KPI_CS_SNAPSHOT_KEY = 'kpi_tracker_cs_snapshot_v1';
+function kpiLoadCSSnapshot() {
+  try { const s = localStorage.getItem(KPI_CS_SNAPSHOT_KEY); return s ? JSON.parse(s) : {}; }
+  catch(e) { return {}; }
+}
+function kpiSaveCSSnapshot(snap) {
+  try { localStorage.setItem(KPI_CS_SNAPSHOT_KEY, JSON.stringify(snap)); } catch(e) {}
+}
+
 function kpiSetStatus(state, text) {
   const dot = document.getElementById('kpiDot');
   const txt = document.getElementById('kpiText');
@@ -2152,6 +2162,31 @@ function kpiBuildMeta(order, items) {
     items: items.map((it, idx) => ({
       sku_id:        it.sku?.id || it.sku?.vendorSku || `__item_${idx + 1}__`,
       product_title: it.sku?.skuInformation?.productTitle || '',
+      quantity:      it.quantity || 0,
+      item_index:    idx + 1
+    }))
+  };
+}
+
+// ─── CS meta builder ──────────────────────────────────────────────────────────
+// Builds the event payload for a Customer Supplied order. CS orders have no
+// submittedBy field and use shipmentNoticeOrderItems instead of inventoryOrderItems.
+// All CS order IDs are prefixed with "CS_" so they are trivially identifiable in
+// the KPI sheet without requiring an Apps Script schema change.
+function kpiBuildCSMeta(order, items) {
+  const wh = order.warehouse?.name || '';
+  return {
+    inventory_order_id: 'CS_' + (order.id || ''),
+    organization: order.organization?.name || '',
+    warehouse: wh,
+    product_title: items.length === 1
+      ? (items[0].sku?.skuInformation?.productTitle || items[0].description || '')
+      : (items.length > 1 ? `${items.length} items` : '—'),
+    total_qty: items.reduce((s, it) => s + (it.quantity || 0), 0),
+    submitted_by: '',
+    items: items.map((it, idx) => ({
+      sku_id:        it.sku?.id || it.sku?.vendorSku || `__item_${idx + 1}__`,
+      product_title: it.sku?.skuInformation?.productTitle || it.description || '',
       quantity:      it.quantity || 0,
       item_index:    idx + 1
     }))
@@ -2540,6 +2575,181 @@ async function kpiFetchCompletedBackstop() {
   }
 }
 
+// ─── CUSTOMER SUPPLIED KPI PROCESSING ─────────────────────────────────────────
+// Tracks CS orders through two transitions only: ordered (createdAt) and
+// completed (updatedAt when status is COMPLETED or PARTIALLY_COMPLETED).
+// No shipped or at_facility stages — CS has no SLO, we only care about counts.
+// All CS IDs are prefixed "CS_" so the KPI sheet can distinguish them without
+// an Apps Script schema change.
+
+const KPI_CS_COMPLETED_STATUSES = new Set(['COMPLETED', 'PARTIALLY_COMPLETED']);
+
+function kpiProcessCSOrders(allOrders) {
+  if (!KPI_TRACKER_URL) return;
+
+  const snapshot       = kpiLoadCSSnapshot();
+  const stagedSnapshot = JSON.parse(JSON.stringify(snapshot));
+  const events         = [];
+
+  allOrders.forEach(order => {
+    if (!isWithinKpiWindow(order)) return;
+    const fid = 'CS_' + order.id;
+    const wh  = order.warehouse?.name || '';
+    if (isBlockedWarehouse(wh)) return;
+
+    const items = order.shipmentNoticeOrderItems || [];
+    const meta  = kpiBuildCSMeta(order, items);
+    const orderStatus = order.status || '';
+
+    const prev = stagedSnapshot[fid] || { hasOrdered: false, hasCompleted: false };
+
+    if (!prev.hasOrdered) {
+      events.push({
+        friendly_order_id: fid,
+        transition: 'ordered',
+        timestamp: order.createdAt || new Date().toISOString(),
+        ...meta
+      });
+      prev.hasOrdered = true;
+    }
+
+    if (!prev.hasCompleted && KPI_CS_COMPLETED_STATUSES.has(orderStatus)) {
+      events.push({
+        friendly_order_id: fid,
+        transition: 'completed',
+        timestamp: order.updatedAt || new Date().toISOString(),
+        ...meta
+      });
+      prev.hasCompleted = true;
+    }
+
+    prev.lastStatus = orderStatus;
+    prev.meta = meta;
+    stagedSnapshot[fid] = prev;
+  });
+
+  if (events.length === 0) {
+    kpiSaveCSSnapshot(stagedSnapshot);
+    kpiFetchCSCompletedBackstop();
+    return;
+  }
+
+  kpiSetStatus('syncing', `KPI: sending ${events.length} CS`);
+  kpiSendEvents(events).then(ok => {
+    if (ok) {
+      kpiSaveCSSnapshot(stagedSnapshot);
+      kpiSetStatus('ok', `KPI: logged ${events.length} CS`);
+    } else {
+      kpiSetStatus('error', 'KPI: CS write failed');
+    }
+    kpiFetchCSCompletedBackstop();
+  });
+}
+
+// Backstop for CS orders — fetches COMPLETED CS orders the active-only query
+// misses, same early-exit logic as the inventory backstop.
+async function kpiFetchCSCompletedBackstop() {
+  if (!KPI_TRACKER_URL) return;
+  try {
+    const query = `query GetCompletedCSOrders($paging: PagingAndSorting!, $filter: ShipmentNoticeOrderFilter) {
+  getShipmentNoticeOrders(pagingAndSorting: $paging, shipmentNoticeOrderFilter: $filter) {
+    data {
+      id
+      status
+      createdAt
+      updatedAt
+      organization { id name }
+      warehouse { id name }
+      shipmentNoticeOrderItems {
+        id quantity description
+        sku { id vendorSku skuInformation { productTitle } }
+      }
+    }
+    totalElements
+  }
+}`;
+
+    const PAGE_SIZE  = 250;
+    const MAX_PAGES  = 5;
+
+    const snapshot       = kpiLoadCSSnapshot();
+    const stagedSnapshot = JSON.parse(JSON.stringify(snapshot));
+    const events         = [];
+    let   pagesWalked    = 0;
+
+    for (let pageNumber = 1; pageNumber <= MAX_PAGES; pageNumber++) {
+      const res = await fetch(API_GRAPHQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          variables: {
+            paging: { pageNumber, pageSize: PAGE_SIZE, sort: [{ field: 'updatedAt', direction: 'DESC' }] },
+            filter: { shipmentNoticeOrderStatuses: ['COMPLETED'] }
+          }
+        })
+      });
+
+      if (!res.ok) { console.warn('KPI CS backstop HTTP', res.status, 'page', pageNumber); break; }
+      const json = await res.json();
+      if (json.errors) { console.error('KPI CS backstop GraphQL errors:', json.errors); break; }
+
+      const data = json.data?.getShipmentNoticeOrders?.data || [];
+      pagesWalked++;
+      const eventsBefore = events.length;
+
+      data.forEach(order => {
+        if (!isWithinKpiWindow(order)) return;
+        const fid = 'CS_' + order.id;
+        const wh  = order.warehouse?.name || '';
+        if (isBlockedWarehouse(wh)) return;
+
+        const items = order.shipmentNoticeOrderItems || [];
+        const meta  = kpiBuildCSMeta(order, items);
+        const prev  = stagedSnapshot[fid] || { hasOrdered: false, hasCompleted: false };
+
+        if (!prev.hasOrdered) {
+          events.push({
+            friendly_order_id: fid,
+            transition: 'ordered',
+            timestamp: order.createdAt || new Date().toISOString(),
+            ...meta
+          });
+          prev.hasOrdered = true;
+        }
+
+        if (!prev.hasCompleted) {
+          events.push({
+            friendly_order_id: fid,
+            transition: 'completed',
+            timestamp: order.updatedAt || new Date().toISOString(),
+            ...meta
+          });
+          prev.hasCompleted = true;
+        }
+
+        stagedSnapshot[fid] = prev;
+      });
+
+      if (data.length < PAGE_SIZE) break;
+      if (data.length > 0 && events.length === eventsBefore) break;
+    }
+
+    if (events.length === 0) return;
+
+    kpiSetStatus('syncing', `KPI: CS backstop sending ${events.length} (${pagesWalked}p)`);
+    const ok = await kpiSendEvents(events);
+    if (ok) {
+      kpiSaveCSSnapshot(stagedSnapshot);
+      kpiSetStatus('ok', `KPI: CS backstop logged ${events.length} (${pagesWalked}p)`);
+    } else {
+      kpiSetStatus('error', 'KPI: CS backstop write failed');
+    }
+  } catch (err) {
+    console.error('KPI CS backstop error:', err);
+  }
+}
+
 // ─── INBOUND KPI DASHBOARD ──────────────────────────────────────────────────
 // Reads rows from the KPI_Tracker sheet (via the same Apps Script web app's
 // GET ?action=read endpoint), computes SLO metrics, renders cards/charts/tables.
@@ -2909,8 +3119,12 @@ function kpiRenderTrendChart(rows) {
 
   const cfg = kpiGetLegConfig();
 
+  // Separate inventory rows from CS rows. CS rows are identified by the "CS_"
+  // prefix added to inventory_order_id when events are written to the KPI sheet.
+  const invRows = rows.filter(r => !(r.inventory_order_id || '').startsWith('CS_'));
+  const csRows  = rows.filter(r =>  (r.inventory_order_id || '').startsWith('CS_'));
+
   // Update card title/subtitle to reflect granularity, warehouse, and leg type.
-  // Subtitle warehouse hint: 1 selected → name; 2-3 → comma list; >3 → "N warehouses".
   const titleEl = document.getElementById('kpiTrendTitle');
   const subEl   = document.getElementById('kpiTrendSubtitle');
   const cleanNames = selectedWhs.map(w => w.replace('Warehouse - ', ''));
@@ -2923,18 +3137,18 @@ function kpiRenderTrendChart(rows) {
     const whPart = whLabel ? ` · ${whLabel}` : '';
     if (cfg.hasSlo) {
       subEl.textContent = (isMonth
-        ? 'Shipments received per month, split by in-SLO vs out-of-SLO'
-        : 'Shipments received per week, split by in-SLO vs out-of-SLO') + whPart;
+        ? 'Shipments received per month — inventory (SLO) + customer supplied'
+        : 'Shipments received per week — inventory (SLO) + customer supplied') + whPart;
     } else {
       subEl.textContent = (isMonth
-        ? 'Shipments arrived at facility per month'
-        : 'Shipments arrived at facility per week') + whPart;
+        ? 'Shipments arrived at facility per month — inventory + customer supplied'
+        : 'Shipments arrived at facility per week — inventory + customer supplied') + whPart;
     }
   }
 
-  // Group received orders by bucket. SLO leg splits in/out; tracker leg is total only.
+  // Bucket inventory rows by SLO outcome (or total for tracker leg).
   const byBucket = {};
-  rows.forEach(r => {
+  invRows.forEach(r => {
     if (!cfg.hasData(r)) return;
     const endDate = kpiParseDate(r[cfg.endField]);
     const v = cfg.getValue(r);
@@ -2946,18 +3160,31 @@ function kpiRenderTrendChart(rows) {
     else if (cfg.hasSlo) byBucket[bucket].outSlo++;
   });
 
-  const keys   = Object.keys(byBucket).sort();
-  const labels = keys.map(k => kpiFormatBucketLabel(k, granularity));
+  // Bucket CS rows by completed_at (no SLO — count only).
+  const csByBucket = {};
+  csRows.forEach(r => {
+    if (!r.completed_at) return;
+    const endDate = kpiParseDate(r.completed_at);
+    if (!endDate) return;
+    const bucket = isMonth ? kpiMonthKey(endDate) : kpiIsoWeekKey(endDate);
+    csByBucket[bucket] = (csByBucket[bucket] || 0) + 1;
+  });
+
+  // Merge keys from both sources so the x-axis covers every bucket.
+  const allKeys = [...new Set([...Object.keys(byBucket), ...Object.keys(csByBucket)])].sort();
+  const labels  = allKeys.map(k => kpiFormatBucketLabel(k, granularity));
 
   let datasets;
   if (cfg.hasSlo) {
     datasets = [
-      { label: 'In SLO',     data: keys.map(k => byBucket[k].inSlo),  backgroundColor: 'rgba(22,163,74,0.85)', borderColor: '#16a34a', borderWidth: 1, stack: 'total' },
-      { label: 'Out of SLO', data: keys.map(k => byBucket[k].outSlo), backgroundColor: 'rgba(220,38,38,0.85)', borderColor: '#dc2626', borderWidth: 1, stack: 'total' }
+      { label: 'In SLO',           data: allKeys.map(k => (byBucket[k] || {}).inSlo  || 0), backgroundColor: 'rgba(22,163,74,0.85)',   borderColor: '#16a34a', borderWidth: 1, stack: 'total' },
+      { label: 'Out of SLO',       data: allKeys.map(k => (byBucket[k] || {}).outSlo || 0), backgroundColor: 'rgba(220,38,38,0.85)',   borderColor: '#dc2626', borderWidth: 1, stack: 'total' },
+      { label: 'Customer Supplied', data: allKeys.map(k => csByBucket[k]             || 0), backgroundColor: 'rgba(107,91,149,0.85)',  borderColor: '#6b5b95', borderWidth: 1, stack: 'total' }
     ];
   } else {
     datasets = [
-      { label: 'Shipments received', data: keys.map(k => byBucket[k].total), backgroundColor: 'rgba(61,111,255,0.85)', borderColor: '#3d6fff', borderWidth: 1 }
+      { label: 'Inventory',         data: allKeys.map(k => (byBucket[k] || {}).total || 0), backgroundColor: 'rgba(61,111,255,0.85)',  borderColor: '#3d6fff', borderWidth: 1, stack: 'total' },
+      { label: 'Customer Supplied', data: allKeys.map(k => csByBucket[k]             || 0), backgroundColor: 'rgba(107,91,149,0.85)', borderColor: '#6b5b95', borderWidth: 1, stack: 'total' }
     ];
   }
 
@@ -2969,11 +3196,11 @@ function kpiRenderTrendChart(rows) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { stacked: cfg.hasSlo, title: { display: true, text: isMonth ? 'Month' : 'Week' }, ticks: { font: { size: 11 } } },
-        y: { stacked: cfg.hasSlo, title: { display: true, text: 'Shipments received' }, ticks: { precision: 0 }, beginAtZero: true }
+        x: { stacked: true, title: { display: true, text: isMonth ? 'Month' : 'Week' }, ticks: { font: { size: 11 } } },
+        y: { stacked: true, title: { display: true, text: 'Shipments received' }, ticks: { precision: 0 }, beginAtZero: true }
       },
       plugins: {
-        legend: { position: 'bottom', display: cfg.hasSlo, labels: { boxWidth: 12, font: { size: 11 } } },
+        legend: { position: 'bottom', display: true, labels: { boxWidth: 12, font: { size: 11 } } },
         tooltip: {
           mode: 'index',
           callbacks: {
@@ -2984,11 +3211,15 @@ function kpiRenderTrendChart(rows) {
             },
             label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}`,
             footer: (items) => {
-              if (!cfg.hasSlo) return '';
               const total = items.reduce((sum, i) => sum + (i.parsed.y || 0), 0);
-              const inSlo = items.find(i => i.dataset.label === 'In SLO');
-              const pct = total > 0 && inSlo ? Math.round((inSlo.parsed.y / total) * 100) : 0;
-              return `Total: ${total}  ·  ${pct}% in SLO`;
+              if (cfg.hasSlo) {
+                const inSloItem  = items.find(i => i.dataset.label === 'In SLO');
+                const outSloItem = items.find(i => i.dataset.label === 'Out of SLO');
+                const invTotal   = (inSloItem?.parsed.y || 0) + (outSloItem?.parsed.y || 0);
+                const pct = invTotal > 0 && inSloItem ? Math.round((inSloItem.parsed.y / invTotal) * 100) : 0;
+                return `Total: ${total}  ·  ${pct}% inv SLO`;
+              }
+              return `Total: ${total}`;
             }
           }
         }
@@ -4508,6 +4739,11 @@ async function csFetchFromAPI() {
         csOrders[fid].sku_id = '';
       }
     });
+
+    // KPI tracker — diff allOrders against CS snapshot and emit ordered/completed
+    // events. Runs before csSaveState so the raw API payload (including updatedAt)
+    // is still available.
+    try { kpiProcessCSOrders(allOrders); } catch (e) { console.error('KPI CS tracker error:', e); }
 
     csSaveState();
     csRenderAll();
@@ -8782,6 +9018,20 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
     var overallEval   = overallMet + overallMissed;
     var overallPct    = overallEval > 0 ? (overallMet / overallEval * 100).toFixed(1) : null;
 
+    // ── CS completions for the week (no SLO — count only) ──
+    var csTotal = 0;
+    var csUnits = 0;
+    rows.forEach(function (r) {
+      if (!(r.inventory_order_id || '').startsWith('CS_')) return;
+      if (!r.completed_at) return;
+      var csDate = kpiParseDate(r.completed_at);
+      if (!csDate) return;
+      var csISO = csDate.toISOString().slice(0, 10);
+      if (csISO < startISO || csISO > endISO) return;
+      csTotal++;
+      csUnits += (r.total_qty || 0);
+    });
+
     return {
       weekStart:     fmtShort(range.start),
       weekEnd:       fmtShort(range.end),
@@ -8791,7 +9041,9 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       overallMet:    overallMet,
       overallMissed: overallMissed,
       overallEval:   overallEval,
-      overallPct:    overallPct
+      overallPct:    overallPct,
+      csTotal:       csTotal,
+      csUnits:       csUnits
     };
   }
 
@@ -8893,6 +9145,14 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
         div;
     }
 
+    var csSection = s.csTotal > 0
+      ? '\n' + div + '\n' +
+        'CUSTOMER SUPPLIED  (no SLO)\n' +
+        div + '\n' +
+        '  ' + String(s.csTotal).padStart(4) + ' completed (' + s.csUnits + ' units)\n' +
+        div
+      : '';
+
     return 'Hi Team,\n\n' +
       header + '\n\n' +
       div + '\n' +
@@ -8908,6 +9168,7 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
       overallRecv.padEnd(26) +
       overallPctStr.padStart(7) + ' SLO  ' + overallFlag + '\n' +
       div +
+      csSection +
       trendSection + '\n\n' +
       '\u2014 Firstbase Ops Bot';
   }
@@ -8995,6 +9256,16 @@ var _WISE_ORG_ID = '5935ee50-ebe6-4e99-924e-a577315f806f';
           '<td style="padding:9px 14px;font-size:13px;font-family:var(--mono);text-align:right;border-top:2px solid var(--border2);color:' + (s.overallMissed > 0 ? 'var(--red)' : 'var(--text2)') + '">' + s.overallMissed + '</td>' +
         '</tr></tfoot>' +
       '</table>' +
+
+      (s.csTotal > 0
+        ? '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:20px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">' +
+            '<span style="font-size:13px;font-weight:600;color:var(--purple);margin-right:4px">⬛ Customer Supplied</span>' +
+            '<span style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--purple)">' + s.csTotal + '</span>' +
+            '<span style="font-size:13px;color:var(--text2)">shipments completed</span>' +
+            '<span style="font-size:12px;font-family:var(--mono);color:var(--muted);margin-left:4px">(' + s.csUnits + ' units)</span>' +
+            '<span style="font-size:11px;color:var(--muted);margin-left:4px">· no SLO tracked</span>' +
+          '</div>'
+        : '') +
 
       trendHtml +
 
