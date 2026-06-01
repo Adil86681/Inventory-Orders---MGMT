@@ -2807,7 +2807,15 @@ function kpiGetLegConfig() {
     sloLabel:   `currently >${KPI_SLO_DAYS} business days at facility`,
     unitMode:   'business_days',
     hasData:    r => r.at_facility_at && r.completed_at,
-    isOpen:     r => r.at_facility_at && !r.completed_at,
+    isOpen:     r => {
+      if (!r.at_facility_at || r.completed_at) return false;
+      // Guard: if the live order is still SHIPPED, the at_facility_at timestamp
+      // was recorded prematurely (e.g. a brief status blip between polls).
+      // Don't count it as an open breach — the order hasn't truly arrived yet.
+      const live = (typeof invOrders !== 'undefined') && invOrders[r.friendly_order_id];
+      if (live && live.order_status === 'SHIPPED') return false;
+      return true;
+    },
     // Returns business-day diff (date-only, Sat/Sun excluded). Time of day ignored.
     getDays:    r => {
       const s = kpiParseDate(r.at_facility_at), e = kpiParseDate(r.completed_at);
